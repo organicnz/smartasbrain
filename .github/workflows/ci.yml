@@ -1,0 +1,44 @@
+# CI for smartasbrain, executed on the maintainer's self-hosted macOS runner.
+#
+# SECURITY: this repository is public and uses a self-hosted runner. Do NOT
+# add a `pull_request` trigger — pull requests from forks would be able to
+# execute arbitrary code on the runner machine.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: fmt + clippy + test (self-hosted)
+    runs-on: [self-hosted, rust]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ensure cargo is on PATH
+        run: |
+          if ! command -v cargo >/dev/null; then
+            echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          fi
+          cargo --version
+          rustc --version
+
+      - name: Format
+        run: cargo fmt --all --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test --workspace
+
+      - name: Release build
+        run: cargo build --release -p platform
