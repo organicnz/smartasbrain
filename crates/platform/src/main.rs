@@ -45,8 +45,9 @@ fn main() -> io::Result<()> {
 
 fn run_app(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> io::Result<()> {
     let mut shell = Shell::new(vec![
-        Box::new(sudoku::App::new()),
         Box::new(lobby::Lobby::new()),
+        Box::new(sudoku::App::new()),
+        Box::new(go::GoGame::new()),
     ]);
 
     // Paint once immediately so startup never waits a frame.

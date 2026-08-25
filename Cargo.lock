@@ -156,6 +156,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "go"
+version = "0.1.0"
+dependencies = [
+ "crossterm",
+ "game-core",
+ "ratatui",
+]
+
+[[package]]
 name = "hashbrown"
 version = "0.15.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -298,6 +307,7 @@ version = "0.1.0"
 dependencies = [
  "crossterm",
  "game-core",
+ "go",
  "ratatui",
  "sudoku",
 ]

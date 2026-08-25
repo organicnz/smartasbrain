@@ -1,15 +1,9 @@
 [package]
-name = "platform"
+name = "go"
 version.workspace = true
 edition.workspace = true
 
-[[bin]]
-name = "smartasbrain"
-path = "src/main.rs"
-
 [dependencies]
 game-core = { workspace = true }
-sudoku = { workspace = true }
-go = { workspace = true }
 ratatui = { workspace = true }
 crossterm = { workspace = true }

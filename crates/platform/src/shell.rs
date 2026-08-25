@@ -29,6 +29,8 @@ pub struct Shell {
     active: usize,
     /// Last known mouse position, for tab hover styling.
     mouse: Option<(u16, u16)>,
+    /// Click target for the brand label (returns to the lobby).
+    brand_rect: Option<Rect>,
     /// Click targets for tab labels, rebuilt every frame.
     tab_rects: Vec<Rect>,
 }
@@ -39,6 +41,7 @@ impl Shell {
             games,
             active: 0,
             mouse: None,
+            brand_rect: None,
             tab_rects: Vec::new(),
         }
     }
@@ -81,7 +84,17 @@ impl Shell {
                 self.switch_to(TabNav::Index(i));
                 true
             }
-            None => false,
+            None => {
+                // Brand click returns to the lobby.
+                if let Some(brand) = self.brand_rect
+                    && in_rect(brand, mouse.column, mouse.row)
+                {
+                    self.switch_to(TabNav::Index(0));
+                    true
+                } else {
+                    false
+                }
+            }
         }
     }
 
@@ -104,6 +117,27 @@ impl Shell {
     fn draw_tab_bar(&mut self, frame: &mut Frame, bar: Rect) {
         frame.render_widget(Block::default().style(Style::default().bg(BAR_BG)), bar);
 
+        // Brand on the left; clicking it returns to the lobby (tab 0).
+        const BRAND: &str = " smartasbrain ";
+        let brand_w = BRAND.chars().count() as u16;
+        self.brand_rect = None;
+        if brand_w < bar.width {
+            let rect = Rect {
+                x: bar.x,
+                y: bar.y,
+                width: brand_w,
+                height: 1,
+            };
+            self.brand_rect = Some(rect);
+            frame.render_widget(
+                Paragraph::new(Line::from(Span::styled(
+                    BRAND,
+                    Style::default().fg(ACCENT_FG).add_modifier(Modifier::BOLD),
+                ))),
+                rect,
+            );
+        }
+
         const PAD: u16 = 1;
         let widths: Vec<u16> = self
             .games
@@ -111,11 +145,15 @@ impl Shell {
             .map(|g| g.title().chars().count() as u16 + PAD * 2)
             .collect();
 
-        let mut x = bar.x;
+        let mut x = bar.x + brand_w.min(bar.width);
+        let tabs_end = bar.x
+            + bar
+                .width
+                .saturating_sub("[ ] tabs · alt+1-9 jump · ctrl+q quit".chars().count() as u16 + 1);
         self.tab_rects.clear();
         for (i, game) in self.games.iter().enumerate() {
-            // On degenerate terminals labels truncate instead of overflowing.
-            let width = widths[i].min(bar.width / self.games.len() as u16).max(1);
+            let remaining = tabs_end.saturating_sub(x);
+            let width = widths[i].min(remaining).max(1);
             let rect = Rect {
                 x,
                 y: bar.y,
@@ -181,7 +219,11 @@ mod tests {
     use ratatui::backend::TestBackend;
 
     fn shell() -> Shell {
-        Shell::new(vec![Box::new(Lobby::new()), Box::new(sudoku::App::new())])
+        Shell::new(vec![
+            Box::new(Lobby::new()),
+            Box::new(sudoku::App::new()),
+            Box::new(go::GoGame::new()),
+        ])
     }
 
     #[test]
@@ -191,12 +233,37 @@ mod tests {
         shell.switch_to(TabNav::Next);
         assert_eq!(shell.games[shell.active].id(), "sudoku");
         shell.switch_to(TabNav::Next);
+        assert_eq!(shell.games[shell.active].id(), "go");
+        shell.switch_to(TabNav::Next);
         assert_eq!(shell.games[shell.active].id(), "lobby", "wraps around");
         shell.switch_to(TabNav::Prev);
+        assert_eq!(shell.games[shell.active].id(), "go");
+        shell.switch_to(TabNav::Index(1));
         assert_eq!(shell.games[shell.active].id(), "sudoku");
-        shell.switch_to(TabNav::Index(0));
-        assert_eq!(shell.games[shell.active].id(), "lobby");
         shell.switch_to(TabNav::Index(99));
+        assert_eq!(
+            shell.games[shell.active].id(),
+            "sudoku",
+            "out-of-range ignored"
+        );
+    }
+
+    #[test]
+    fn brand_click_returns_to_lobby() {
+        let mut shell = shell();
+        shell.switch_to(TabNav::Index(2));
+        let backend = TestBackend::new(80, 24);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        terminal.draw(|f| shell.draw(f)).unwrap();
+
+        let brand = shell.brand_rect.expect("brand rendered at 80 cols");
+        let swallowed = shell.handle_mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: brand.x + 2,
+            row: brand.y,
+            modifiers: KeyModifiers::NONE,
+        });
+        assert!(swallowed, "brand click belongs to the navbar");
         assert_eq!(shell.games[shell.active].id(), "lobby");
     }
 
@@ -207,7 +274,8 @@ mod tests {
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
         terminal.draw(|f| shell.draw(f)).unwrap();
 
-        let target = shell.tab_rects[1];
+        assert_eq!(shell.tab_rects.len(), 3, "one click target per game tab");
+        let target = shell.tab_rects[2];
         let swallowed = shell.handle_mouse(MouseEvent {
             kind: MouseEventKind::Down(MouseButton::Left),
             column: target.x + 1,
@@ -215,7 +283,7 @@ mod tests {
             modifiers: KeyModifiers::NONE,
         });
         assert!(swallowed);
-        assert_eq!(shell.games[shell.active].id(), "sudoku");
+        assert_eq!(shell.games[shell.active].id(), "go");
 
         let outside = shell.handle_mouse(MouseEvent {
             kind: MouseEventKind::Down(MouseButton::Left),

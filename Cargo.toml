@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/game-core",
+    "crates/go",
     "crates/sudoku",
     "crates/platform",
 ]
@@ -17,6 +18,7 @@ rand = "0.8"
 
 game-core = { path = "crates/game-core" }
 sudoku = { path = "crates/sudoku" }
+go = { path = "crates/go" }
 
 [profile.release]
 lto = true

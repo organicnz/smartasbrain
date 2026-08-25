@@ -17,11 +17,13 @@ const GIVEN_FG: ratatui::style::Color = ratatui::style::Color::Rgb(226, 230, 244
 const USER_FG: ratatui::style::Color = ratatui::style::Color::Rgb(126, 214, 166);
 const ACCENT_FG: ratatui::style::Color = ratatui::style::Color::Rgb(122, 162, 247);
 
-pub struct Lobby;
+pub struct Lobby {
+    quit: bool,
+}
 
 impl Lobby {
     pub fn new() -> Self {
-        Self
+        Self { quit: false }
     }
 }
 
@@ -40,7 +42,12 @@ impl Game for Lobby {
         "lobby"
     }
 
-    fn handle_key(&mut self, _key: KeyEvent) {}
+    fn handle_key(&mut self, key: KeyEvent) {
+        use crossterm::event::KeyCode;
+        if matches!(key.code, KeyCode::Char('q' | 'Q') | KeyCode::Esc) {
+            self.quit = true;
+        }
+    }
 
     fn handle_mouse(&mut self, _mouse: MouseEvent) {}
 
@@ -103,5 +110,9 @@ impl Game for Lobby {
             .alignment(Alignment::Center),
             rows[6],
         );
+    }
+
+    fn wants_quit(&self) -> bool {
+        self.quit
     }
 }

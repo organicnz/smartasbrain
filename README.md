@@ -18,7 +18,7 @@ Built with [ratatui](https://ratatui.rs) at a steady 60 FPS.
 | --------- | ------- |
 | Lobby     | shipped |
 | Sudoku    | shipped — generator with MRV uniqueness prover, pencil marks, hints, undo/redo, pause, personal bests |
-| Go        | planned |
+| Go 9×9    | shipped — captures, suicide rule, superko, passing, area scoring with komi; AI opponent planned |
 | AI Battleground | planned — AIs competing against each other in real time |
 
 ## Run
@@ -53,6 +53,15 @@ Requires a terminal with mouse support. macOS/Linux; Windows Terminal works too.
 | `n`                  | new puzzle menu                 |
 | right-click          | erase cell under cursor         |
 
+### Go controls
+
+| Key                | Action                        |
+| ------------------ | ----------------------------- |
+| arrows / `h j k l` | move cursor                   |
+| `Enter` / `Space` / click | place stone            |
+| `p` / pass button  | pass (two consecutive passes end the game) |
+| `r` / restart      | new game                      |
+
 Personal best times persist per difficulty in
 `~/Library/Application Support/sudoku/` (macOS) or `$XDG_DATA_HOME/sudoku/`.
 
@@ -63,8 +72,9 @@ Cargo workspace, three crates:
 ```
 crates/
 ├── game-core   Game trait + shell contracts
+├── go          9x9 Go: rules engine + TUI (pure lib)
 ├── sudoku      the game as a plugin (pure lib)
-└── platform    smartasbrain binary: tab bar, input router, 60 FPS loop
+└── platform    smartasbrain binary: navbar, input router, 60 FPS loop
 ```
 
 Every game implements `game_core::Game`:
@@ -93,6 +103,6 @@ AI players — the shell already gives it a real-time frame budget.
 ## Development
 
 ```sh
-cargo test --workspace       # 28 tests incl. frame-cost regression guard
+cargo test --workspace       # 36 tests incl. frame-cost regression guard
 cargo clippy --workspace --all-targets
 ```
