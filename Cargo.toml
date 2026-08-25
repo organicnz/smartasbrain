@@ -1,0 +1,22 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/game-core",
+    "crates/sudoku",
+    "crates/platform",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+
+[workspace.dependencies]
+ratatui = "0.29"
+crossterm = "0.28"
+rand = "0.8"
+
+game-core = { path = "crates/game-core" }
+sudoku = { path = "crates/sudoku" }
+
+[profile.release]
+lto = true
