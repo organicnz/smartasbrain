@@ -3,7 +3,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Paragraph},
+    widgets::{Block, BorderType, Clear, Paragraph},
 };
 
 use super::Button;
@@ -22,15 +22,49 @@ const CROSS_BG: Color = Color::Rgb(38, 44, 60);
 const SELECT_BG: Color = Color::Rgb(52, 66, 104);
 const BUTTON_BG: Color = Color::Rgb(24, 28, 42);
 
+// Setup menu palette (doom-adjacent).
+const FIRE_FG: Color = Color::Rgb(178, 34, 34);
+const BONE_FG: Color = Color::Rgb(216, 208, 194);
+const MENU_SELECT_BG: Color = Color::Rgb(88, 16, 14);
+const MENU_HOVER_BG: Color = Color::Rgb(54, 22, 18);
+
+/// Entries of the setup overlay; digits 1..=N jump to an entry.
+pub const SETUP_ITEMS: [&str; 7] = [
+    "TWO PLAYERS",
+    "VS AI - EASY",
+    "VS AI - MEDIUM",
+    "VS AI - HARD",
+    "AI DUEL - EASY",
+    "AI DUEL - MEDIUM",
+    "AI DUEL - HARD",
+];
+
+/// Panel facts the game layer computes each frame.
+pub struct Hud<'a> {
+    /// e.g. `"two players"`, `"vs ai MEDIUM (white)"` or `"ai duel HARD"`.
+    pub mode: &'a str,
+    /// Side whose automated move is owed, shown as `<glyph> thinking...`.
+    pub thinking: Option<Player>,
+}
+
 pub struct Geom {
     /// Screen position of the top-left intersection.
     x0: u16,
     y0: u16,
+    /// Columns per cell: 2 in roomy layouts, 1 when the terminal is tight.
+    stride: u16,
+    /// Rows per cell: 2 on tall/large screens keeps the board square.
+    cell_h: u16,
 }
 
 impl Geom {
-    fn new(x0: u16, y0: u16) -> Self {
-        Self { x0, y0 }
+    fn new(x0: u16, y0: u16, stride: u16, cell_h: u16) -> Self {
+        Self {
+            x0,
+            y0,
+            stride,
+            cell_h: cell_h.max(1),
+        }
     }
 
     pub fn cell_at(&self, col: u16, row: u16) -> Option<usize> {
@@ -38,10 +72,10 @@ impl Geom {
             return None;
         }
         let (dr, dc) = ((row - self.y0), (col - self.x0));
-        if dc % 2 != 0 {
+        if self.stride == 0 || dc % self.stride != 0 {
             return None;
         }
-        let (r, c) = (dr as usize, (dc / 2) as usize);
+        let (r, c) = ((dr / self.cell_h) as usize, (dc / self.stride) as usize);
         if r >= super::SIZE || c >= super::SIZE {
             return None;
         }
@@ -70,63 +104,149 @@ pub fn in_rect(r: Rect, col: u16, row: u16) -> bool {
     col >= r.x && col < r.x + r.width && row >= r.y && row < r.y + r.height
 }
 
-/// Board occupies `2*SIZE-1` columns and SIZE rows inside its block.
-fn board_block_w() -> u16 {
-    2 * super::SIZE as u16 - 1 + 2
+/// Board block width for a given cell stride (borders included).
+fn board_block_w(stride: u16) -> u16 {
+    game_core::geom::board_width(super::SIZE as u16, stride) + 2
 }
-fn board_block_h() -> u16 {
-    super::SIZE as u16 + 2
+fn board_block_h(cell_h: u16) -> u16 {
+    game_core::geom::board_height(super::SIZE as u16, cell_h) + 2
 }
 const PANEL_W: u16 = 26;
+/// Cell widths tried from roomiest to tightest when placing the canvas.
+/// Roomiest-first ladder: cells up to 13x6 (a ~4.5x linear scale-up).
+fn cell_options() -> Vec<game_core::geom::CellSize> {
+    game_core::geom::proportional_ladder(super::SIZE as u16, super::SIZE as u16, 13, 6)
+}
 
 pub fn draw(
     frame: &mut Frame,
     state: &mut GoState,
     area: Rect,
     cursor: usize,
+    hud: &Hud<'_>,
     geom_out: &mut Option<Geom>,
     buttons: &mut Vec<(Rect, Button)>,
 ) {
-    // Too small to draw anything safely (also covers 0x0 ptty startup).
-    if area.width < board_block_w() || area.height <= board_block_h() {
+    // Resizable canvas: pick the widest cell that fits, else stand down
+    // (also covers 0x0 ptty startup).
+    let options = cell_options();
+    let Some(canvas) =
+        game_core::geom::fit_canvas(area, super::SIZE as u16, super::SIZE as u16, 1, &options)
+    else {
+        *geom_out = None;
+        return;
+    };
+    if area.height < board_block_h(canvas.cell_h) + 1 {
         *geom_out = None;
         return;
     }
+    let block_w = board_block_w(canvas.cell_w);
 
-    let side = area.width >= board_block_w() + 2 + PANEL_W && area.height > board_block_h() + 7;
+    let side =
+        area.width >= block_w + 2 + PANEL_W && area.height > board_block_h(canvas.cell_h) + 7;
     let cluster_w = if side {
-        board_block_w() + 2 + PANEL_W
+        block_w + 2 + PANEL_W
     } else {
-        board_block_w().max(PANEL_W)
+        block_w.max(PANEL_W)
     };
     let cluster_h = if side {
-        board_block_h()
+        board_block_h(canvas.cell_h)
     } else {
-        board_block_h() + 1 + 7
+        board_block_h(canvas.cell_h).min(area.height.saturating_sub(1))
+            + 1
+            + 7.min(area.height.saturating_sub(board_block_h(canvas.cell_h) + 1))
     };
+    let _ = cluster_h;
 
     let cluster = centered_rect(area, cluster_w.min(area.width), cluster_h.min(area.height));
     let cols = Layout::horizontal([
-        Constraint::Length(board_block_w()),
+        Constraint::Length(block_w),
         Constraint::Length(2),
         Constraint::Length(PANEL_W),
     ])
     .split(cluster);
 
-    draw_board(frame, cols[0], state, cursor, geom_out);
+    draw_board(
+        frame,
+        cols[0],
+        state,
+        cursor,
+        geom_out,
+        canvas.cell_w,
+        canvas.cell_h,
+    );
 
     let panel = if side {
         cols[2]
     } else {
-        let panel_h = 7.min(area.height - board_block_h());
+        let panel_h = 7.min(area.height - board_block_h(canvas.cell_h));
         Rect {
             x: cluster.x,
-            y: cluster.y + board_block_h(),
+            y: cluster.y + board_block_h(canvas.cell_h),
             width: PANEL_W.min(area.width),
             height: panel_h,
         }
     };
-    draw_panel(frame, panel, state, buttons);
+    draw_panel(frame, panel, state, hud, buttons);
+}
+
+/// Modal setup overlay; records each entry's screen rect for mouse input.
+pub fn draw_setup(
+    frame: &mut Frame,
+    area: Rect,
+    selected: usize,
+    hover: Option<usize>,
+    rects_out: &mut Vec<(Rect, usize)>,
+) {
+    rects_out.clear();
+    let width = 26.min(area.width);
+    let height = (SETUP_ITEMS.len() as u16 + 3).min(area.height);
+    if width < 4 || height < 3 {
+        return;
+    }
+    let popup = centered_rect(area, width, height);
+    frame.render_widget(Clear, popup);
+
+    let block = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(FIRE_FG))
+        .style(Style::default().bg(BG))
+        .title(Line::from(Span::styled(
+            " go setup ",
+            Style::default().fg(FIRE_FG).add_modifier(Modifier::BOLD),
+        )));
+    let inner = block.inner(popup);
+    frame.render_widget(block, popup);
+
+    for (i, label) in SETUP_ITEMS.iter().enumerate() {
+        let row = i as u16;
+        if row >= inner.height {
+            break;
+        }
+        let rect = Rect {
+            x: inner.x,
+            y: inner.y + row,
+            width: inner.width,
+            height: 1,
+        };
+        rects_out.push((rect, i));
+
+        let style = if i == selected {
+            Style::default()
+                .fg(BONE_FG)
+                .bg(MENU_SELECT_BG)
+                .add_modifier(Modifier::BOLD)
+        } else if hover == Some(i) {
+            Style::default().fg(BONE_FG).bg(MENU_HOVER_BG)
+        } else {
+            Style::default().fg(DIM_FG)
+        };
+        let line = Line::from(vec![
+            Span::styled(format!(" {} ", i + 1), Style::default().fg(FIRE_FG)),
+            Span::styled(*label, style),
+        ]);
+        frame.render_widget(Paragraph::new(line), rect);
+    }
 }
 
 fn draw_board(
@@ -135,6 +255,8 @@ fn draw_board(
     state: &GoState,
     cursor: usize,
     geom_out: &mut Option<Geom>,
+    stride: u16,
+    cell_h: u16,
 ) {
     let block = Block::bordered()
         .border_type(BorderType::Rounded)
@@ -158,16 +280,25 @@ fn draw_board(
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    *geom_out = Some(Geom::new(inner.x, inner.y));
+    *geom_out = Some(Geom::new(inner.x, inner.y, stride, cell_h));
 
     let size = state.size();
     let (cr, cc) = (cursor / size, cursor % size);
-    let mut lines = Vec::with_capacity(size);
+    let stone_lines = game_core::geom::board_height(size as u16, cell_h) as usize;
+    let mut lines = Vec::with_capacity(stone_lines);
     for r in 0..size {
+        for _ in 0..(cell_h - 1) {
+            if r > 0 {
+                // Spacer rows between tall cell bands.
+                lines.push(Line::from(vec![Span::raw(" ".repeat(
+                    game_core::geom::board_width(size as u16, stride) as usize,
+                ))]));
+            }
+        }
         let mut spans = Vec::with_capacity(size * 2 - 1);
         for c in 0..size {
-            if c > 0 {
-                spans.push(Span::raw(" "));
+            if c > 0 && stride > 1 {
+                spans.push(Span::raw(" ".repeat((stride - 1) as usize)));
             }
             let idx = r * size + c;
             let stone = state.board()[idx];
@@ -197,7 +328,13 @@ fn draw_board(
     frame.render_widget(Paragraph::new(lines), inner);
 }
 
-fn draw_panel(frame: &mut Frame, area: Rect, state: &GoState, buttons: &mut Vec<(Rect, Button)>) {
+fn draw_panel(
+    frame: &mut Frame,
+    area: Rect,
+    state: &GoState,
+    hud: &Hud<'_>,
+    buttons: &mut Vec<(Rect, Button)>,
+) {
     let block = Block::bordered()
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(PANEL_BORDER_FG))
@@ -254,6 +391,16 @@ fn draw_panel(frame: &mut Frame, area: Rect, state: &GoState, buttons: &mut Vec<
             Span::styled(format!("{} / 2", state.passes), Style::default().fg(DIM_FG)),
         ),
     ];
+    lines.push(kv(
+        "mode",
+        Span::styled(hud.mode.to_string(), Style::default().fg(DIM_FG)),
+    ));
+    if let Some(side) = hud.thinking {
+        lines.push(Line::from(Span::styled(
+            format!("{} thinking...", side.symbol()),
+            Style::default().fg(GOLD_FG),
+        )));
+    }
     lines.extend(result_line);
 
     frame.render_widget(Paragraph::new(lines), inner);
@@ -305,6 +452,7 @@ mod tests {
         for (w, h) in [
             (0u16, 0u16),
             (10, 3),
+            (12, 12),
             (21, 11),
             (40, 14),
             (60, 20),
@@ -315,8 +463,23 @@ mod tests {
     }
 
     #[test]
+    fn compact_canvas_renders_at_narrow_sizes() {
+        // 9x9 with single-char cells needs only 11 columns of board.
+        let mut game = GoGame::new();
+        game.handle_key(crossterm::event::KeyEvent::from(
+            crossterm::event::KeyCode::Enter,
+        )); // leave the setup overlay
+        let backend = TestBackend::new(13, 13);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        terminal
+            .draw(|f| Game::draw(&mut game, f, f.area()))
+            .unwrap();
+        assert!(game.geom.is_some(), "compact canvas should fit");
+    }
+
+    #[test]
     fn click_mapping_round_trips() {
-        let geom = Geom::new(2, 1);
+        let geom = Geom::new(2, 1, 2, 1);
         assert_eq!(geom.cell_at(2, 1), Some(0));
         assert_eq!(geom.cell_at(4, 1), Some(1));
         assert_eq!(geom.cell_at(2, 2), Some(SIZE));

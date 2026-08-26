@@ -50,7 +50,7 @@ pub struct GoState {
     seen: HashSet<u64>,
 }
 
-fn neighbors(size: usize, idx: usize) -> impl Iterator<Item = usize> {
+pub(crate) fn neighbors(size: usize, idx: usize) -> impl Iterator<Item = usize> {
     let r = idx / size;
     let c = idx % size;
     let up = r.checked_sub(1).map(|r| r * size + c);
@@ -61,7 +61,11 @@ fn neighbors(size: usize, idx: usize) -> impl Iterator<Item = usize> {
 }
 
 /// Flood-fills the group containing `start`; returns its stones and liberty count.
-fn group_and_liberties(cells: &[Player], size: usize, start: usize) -> (Vec<usize>, usize) {
+pub(crate) fn group_and_liberties(
+    cells: &[Player],
+    size: usize,
+    start: usize,
+) -> (Vec<usize>, usize) {
     let color = cells[start];
     let mut group = vec![start];
     let mut visited = vec![false; cells.len()];
@@ -255,6 +259,26 @@ impl Score {
 }
 
 #[cfg(test)]
+impl GoState {
+    /// Test-only: build a state directly from cells; superko history holds
+    /// just the given position.
+    pub(crate) fn from_cells(size: usize, cells: Vec<Player>, turn: Player) -> Self {
+        let mut seen = HashSet::new();
+        seen.insert(hash_position(&cells, turn));
+        Self {
+            size,
+            cells,
+            turn,
+            captures_black: 0,
+            captures_white: 0,
+            passes: 0,
+            over: false,
+            last_move: None,
+            seen,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

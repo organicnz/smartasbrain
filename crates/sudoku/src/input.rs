@@ -48,10 +48,27 @@ pub fn on_mouse(app: &mut App, mouse: MouseEvent) {
             }
         }
         crossterm::event::MouseEventKind::Moved => app.hover = Some((col, row)),
-        crossterm::event::MouseEventKind::ScrollUp => app.move_by(-1, 0),
-        crossterm::event::MouseEventKind::ScrollDown => app.move_by(1, 0),
-        crossterm::event::MouseEventKind::ScrollLeft => app.move_by(0, -1),
-        crossterm::event::MouseEventKind::ScrollRight => app.move_by(0, 1),
+        // The wheel steers the cursor only during live play.
+        crossterm::event::MouseEventKind::ScrollUp
+            if app.state == State::Playing && !app.paused =>
+        {
+            app.move_by(-1, 0)
+        }
+        crossterm::event::MouseEventKind::ScrollDown
+            if app.state == State::Playing && !app.paused =>
+        {
+            app.move_by(1, 0)
+        }
+        crossterm::event::MouseEventKind::ScrollLeft
+            if app.state == State::Playing && !app.paused =>
+        {
+            app.move_by(0, -1)
+        }
+        crossterm::event::MouseEventKind::ScrollRight
+            if app.state == State::Playing && !app.paused =>
+        {
+            app.move_by(0, 1)
+        }
         _ => {}
     }
 }
@@ -108,5 +125,44 @@ fn on_won_key(app: &mut App, code: KeyCode) {
         KeyCode::Char('n' | 'N') => app.open_menu(),
         KeyCode::Char('r' | 'R') => app.start(),
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crossterm::event::{KeyModifiers, MouseEventKind};
+
+    fn mouse(kind: MouseEventKind) -> MouseEvent {
+        MouseEvent {
+            kind,
+            column: 0,
+            row: 0,
+            modifiers: KeyModifiers::NONE,
+        }
+    }
+
+    #[test]
+    fn scroll_moves_cursor_only_while_playing_and_awake() {
+        let mut app = App::new();
+        let before = app.cursor;
+        on_mouse(&mut app, mouse(MouseEventKind::ScrollDown));
+        assert_eq!(app.cursor, before, "menu state ignores the wheel");
+
+        app.start();
+        on_mouse(&mut app, mouse(MouseEventKind::ScrollDown));
+        assert_ne!(app.cursor, before, "playing state steers with the wheel");
+
+        app.toggle_pause();
+        let frozen = app.cursor;
+        for kind in [
+            MouseEventKind::ScrollUp,
+            MouseEventKind::ScrollDown,
+            MouseEventKind::ScrollLeft,
+            MouseEventKind::ScrollRight,
+        ] {
+            on_mouse(&mut app, mouse(kind));
+        }
+        assert_eq!(app.cursor, frozen, "paused freezes the wheel");
     }
 }

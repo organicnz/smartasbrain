@@ -1,5 +1,5 @@
 [package]
-name = "go"
+name = "morris"
 version.workspace = true
 edition.workspace = true
 
@@ -7,5 +7,4 @@ edition.workspace = true
 game-core = { workspace = true }
 ratatui = { workspace = true }
 crossterm = { workspace = true }
-
 rand = { workspace = true }

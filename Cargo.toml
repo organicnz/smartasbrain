@@ -4,6 +4,17 @@ members = [
     "crates/game-core",
     "crates/go",
     "crates/sudoku",
+    "crates/chess",
+    "crates/checkers",
+    "crates/backgammon",
+    "crates/reversi",
+    "crates/connect4",
+    "crates/morris",
+    "crates/mancala",
+    "crates/dots",
+    "crates/yahtzee",
+    "crates/battleship",
+    "crates/dominoes",
     "crates/platform",
 ]
 
@@ -19,6 +30,17 @@ rand = "0.8"
 game-core = { path = "crates/game-core" }
 sudoku = { path = "crates/sudoku" }
 go = { path = "crates/go" }
+chess = { path = "crates/chess" }
+checkers = { path = "crates/checkers" }
+backgammon = { path = "crates/backgammon" }
+reversi = { path = "crates/reversi" }
+connect4 = { path = "crates/connect4" }
+morris = { path = "crates/morris" }
+mancala = { path = "crates/mancala" }
+dots = { path = "crates/dots" }
+yahtzee = { path = "crates/yahtzee" }
+battleship = { path = "crates/battleship" }
+dominoes = { path = "crates/dominoes" }
 
 [profile.release]
 lto = true
