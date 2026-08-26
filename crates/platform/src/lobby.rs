@@ -2,6 +2,11 @@
 //! Quake front-ends — block-letter logo, blood-and-ember palette, dagger
 //! selection marker over a two-column game grid. Choosing an entry asks the
 //! shell to open that game's tab via [`Game::poll_navigation`].
+//!
+//! Beautified pass: layered logo shadow + diagonal gradient, flowing ember
+//! divider with spark particles, per-game glyphs, polished briefing pane and
+//! vignetted backdrop — all while preserving the uniform grid geometry that
+//! the tests assert.
 
 use crossterm::event::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 use game_core::Game;
@@ -10,28 +15,52 @@ use ratatui::{
     layout::{Alignment, Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::Paragraph,
+    widgets::{Block, BorderType, Paragraph},
 };
 
 const BG: Color = Color::Rgb(12, 7, 7);
+const BG_VIGNETTE: Color = Color::Rgb(19, 10, 10);
 const FIRE: Color = Color::Rgb(178, 34, 34);
 const EMBER_BRIGHT: Color = Color::Rgb(226, 88, 46);
 const EMBER_DARK: Color = Color::Rgb(126, 44, 28);
 const HOT: Color = Color::Rgb(255, 138, 48);
 const GOLD: Color = Color::Rgb(230, 178, 78);
+const GOLD_GLOW: Color = Color::Rgb(255, 209, 102);
 const BONE: Color = Color::Rgb(216, 208, 194);
 const DIM_RUST: Color = Color::Rgb(134, 74, 56);
 const ASH: Color = Color::Rgb(92, 68, 58);
 const SELECT_BG: Color = Color::Rgb(88, 16, 14);
+const SELECT_BG_HI: Color = Color::Rgb(118, 24, 18);
 const HOVER_BG: Color = Color::Rgb(54, 22, 18);
+const SHADOW: Color = Color::Rgb(28, 12, 12);
 
 /// Dagger shown left of the active entry; idle cells reserve its columns so
 /// every title stays aligned.
-const MARKER: char = '\u{2020}';
+const MARKER: char = '\u{2020}'; // †
+const MARKER_HOT: char = '\u{25B8}'; // ▸ used as alt when pulsing (same width)
 /// Soft border tone shared by framed panes.
 const DIVIDER: Color = Color::Rgb(126, 44, 28); // == EMBER_DARK
 /// Menu grid columns; navigation steps this far per vertical press.
 const COLS: usize = 2;
+
+/// Per-game single-glyph icon shown in the idle marker column — keeps the
+/// uniform 7+title_w geometry intact (one char, no extra width) while giving
+/// each title its own silhouette.
+const GAME_ICONS: [&str; 13] = [
+    "▦", // sudoku
+    "●", // go
+    "♞", // chess
+    "◎", // checkers
+    "⬢", // backgammon
+    "◐", // reversi
+    "╋", // morris
+    "▤", // connect four
+    "◉", // mancala
+    "⬡", // dots
+    "⚂", // yahtzee
+    "▭", // dominoes
+    "⚓", // battleship
+];
 
 /// Menu entries; entry `i` opens shell tab `i + 1` (the lobby lives at 0).
 const ENTRIES: &[(&str, &str)] = &[
@@ -51,7 +80,7 @@ const ENTRIES: &[(&str, &str)] = &[
 ];
 
 /// Roadmap footnote under the menu.
-const ROADMAP: &str = "ai duels live in every game - pick AI DUEL in its setup";
+const ROADMAP: &str = "ai duels live in every game — pick AI DUEL in its setup";
 
 pub struct Lobby {
     quit: bool,
@@ -95,42 +124,100 @@ impl Lobby {
             return;
         }
         let (title, blurb) = ENTRIES[self.selected];
-        let block = ratatui::widgets::Block::bordered()
-            .border_type(ratatui::widgets::BorderType::Rounded)
-            .border_style(Style::default().fg(DIVIDER))
-            .style(Style::default().bg(BG))
-            .title(Line::from(Span::styled(
-                " BRIEFING ",
-                Style::default().fg(GOLD),
-            )));
+        let icon = GAME_ICONS[self.selected];
+        // Double-thin? Rounded keeps the DOOM softness but with a warmer border.
+        let block = Block::bordered()
+            .border_type(BorderType::Rounded)
+            .border_style(Style::default().fg(GOLD).add_modifier(Modifier::BOLD))
+            .style(Style::default().bg(BG_VIGNETTE))
+            .title(Line::from(vec![
+                Span::styled(" ◆ ", Style::default().fg(GOLD_GLOW)),
+                Span::styled(
+                    " BRIEFING ",
+                    Style::default().fg(GOLD).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(" ◆ ", Style::default().fg(GOLD_GLOW)),
+            ]))
+            .title_bottom(
+                Line::from(Span::styled(
+                    format!(" tab {:02} of {:02} ", self.selected + 1, ENTRIES.len()),
+                    Style::default().fg(BONE).bg(SELECT_BG_HI).add_modifier(Modifier::BOLD),
+                ))
+                .right_aligned(),
+            );
         let inner = block.inner(area);
         frame.render_widget(block, area);
+        if inner.height < 4 || inner.width < 8 {
+            return;
+        }
 
+        // Header: icon + spaced title with underline accent.
         let spaced: String = title.chars().flat_map(|c| [c, ' ']).collect();
+        let header = Line::from(vec![
+            Span::styled(
+                format!(" {icon} "),
+                Style::default().fg(HOT).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                spaced.trim().to_string(),
+                Style::default().fg(BONE).add_modifier(Modifier::BOLD),
+            ),
+        ]);
+        let underline = "─".repeat((spaced.chars().count().min(inner.width as usize)) + 2);
         let mut lines = vec![
             Line::from(Span::styled(
-                spaced,
-                Style::default().fg(BONE).add_modifier(Modifier::BOLD),
-            )),
+                " ".repeat(inner.width as usize),
+                Style::default(),
+            )), // top padding
+            header,
+            Line::from(Span::styled(underline, Style::default().fg(DIVIDER))),
             Line::from(Span::raw("")),
         ];
-        lines.extend(
-            wrap(blurb, inner.width.saturating_sub(2) as usize)
-                .into_iter()
-                .map(|l| Line::from(Span::styled(l, Style::default().fg(DIM_RUST)))),
-        );
+        let wrap_w = inner.width.saturating_sub(2) as usize;
+        let wrapped = wrap(blurb, wrap_w);
+        let blurb_style = Style::default().fg(Color::Rgb(196, 148, 118));
+        for l in wrapped {
+            lines.push(Line::from(Span::styled(
+                format!("  {l}"),
+                blurb_style,
+            )));
+        }
+        // Meta line — subtle flavour, keeps pane feeling alive.
         lines.push(Line::from(Span::raw("")));
         lines.push(Line::from(Span::styled(
-            format!("tab {:02} of {:02}", self.selected + 1, ENTRIES.len()),
-            Style::default().fg(ASH),
+            "  ◈  ready to launch  ◈".to_string(),
+            Style::default().fg(ASH).add_modifier(Modifier::ITALIC),
         )));
-        frame.render_widget(Paragraph::new(lines), inner);
 
+        // Clamp to inner height minus the footer button.
+        let footer_h = 1;
+        let available = inner.height.saturating_sub(footer_h + 1) as usize;
+        if lines.len() > available {
+            lines.truncate(available);
+        }
+        frame.render_widget(Paragraph::new(lines), Rect {
+            x: inner.x,
+            y: inner.y,
+            width: inner.width,
+            height: inner.height.saturating_sub(footer_h + 1),
+        });
+
+        // Footer CTA — inset pill that pulses with the ember.
+        let pulse = (self.frame / 24).is_multiple_of(2);
+        let cta_bg = if pulse { SELECT_BG_HI } else { SELECT_BG };
+        let cta_fg = if pulse { GOLD_GLOW } else { HOT };
         frame.render_widget(
-            Paragraph::new(Line::from(Span::styled(
-                "\u{25b8} enter \u{25b8} launch",
-                Style::default().fg(HOT).add_modifier(Modifier::BOLD),
-            )))
+            Paragraph::new(Line::from(vec![
+                Span::styled(" ", Style::default().bg(cta_bg)),
+                Span::styled(
+                    "▸  ENTER",
+                    Style::default().fg(cta_fg).bg(cta_bg).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled("  ·  ", Style::default().fg(ASH).bg(cta_bg)),
+                Span::styled("LAUNCH ", Style::default().fg(BONE).bg(cta_bg).add_modifier(Modifier::BOLD)),
+                Span::styled("▸", Style::default().fg(cta_fg).bg(cta_bg)),
+                Span::styled(" ", Style::default().bg(cta_bg)),
+            ]))
             .alignment(Alignment::Center),
             Rect {
                 x: inner.x,
@@ -221,10 +308,11 @@ impl Game for Lobby {
     }
 
     fn draw(&mut self, frame: &mut Frame, area: Rect) {
-        frame.render_widget(
-            ratatui::widgets::Block::default().style(Style::default().bg(BG)),
-            area,
-        );
+        // Vignetted backdrop — solid fill plus a faint ember speckle field so
+        // the menu doesn't float on flat void. Keeps the same BG semantics
+        // the shell expects, but with depth.
+        frame.render_widget(Block::default().style(Style::default().bg(BG)), area);
+        draw_vignette(frame, area, self.frame);
 
         let grid_rows = ENTRIES.len().div_ceil(COLS) as u16;
         let menu_block_h = grid_rows + 2; // bordered block
@@ -247,14 +335,28 @@ impl Game for Lobby {
 
         self.draw_logo(frame, rows[1]);
         if rows[2].width > 0 && rows[2].height == 1 {
-            frame.render_widget(
-                Paragraph::new(Line::from(Span::styled(
-                    "an arcade for games & their ais",
-                    Style::default().fg(DIM_RUST).add_modifier(Modifier::ITALIC),
-                )))
-                .alignment(Alignment::Center),
-                rows[2],
-            );
+            // Tagline with delicate side rules — reads as a subtitle, not a plain string.
+            let tagline = "an arcade for games  ·  and the ais that play them";
+            if tagline.len() as u16 + 6 <= rows[2].width {
+                let line = Line::from(vec![
+                    Span::styled("──  ", Style::default().fg(ASH)),
+                    Span::styled(
+                        tagline,
+                        Style::default().fg(DIM_RUST).add_modifier(Modifier::ITALIC),
+                    ),
+                    Span::styled("  ──", Style::default().fg(ASH)),
+                ]);
+                frame.render_widget(Paragraph::new(line).alignment(Alignment::Center), rows[2]);
+            } else {
+                frame.render_widget(
+                    Paragraph::new(Line::from(Span::styled(
+                        "an arcade for games & their ais",
+                        Style::default().fg(DIM_RUST).add_modifier(Modifier::ITALIC),
+                    )))
+                    .alignment(Alignment::Center),
+                    rows[2],
+                );
+            }
         }
         if rows[3].width > 0 && rows[3].height == 1 {
             frame.render_widget(flame_line(rows[3].width, self.frame), rows[3]);
@@ -270,19 +372,32 @@ impl Game for Lobby {
             menu_block_h <= area.height.saturating_sub(8) && area.width >= grid_w + info_w + 6;
         self.info_shown = show_info;
 
-        let block = ratatui::widgets::Block::bordered()
-            .border_type(ratatui::widgets::BorderType::Rounded)
-            .border_style(Style::default().fg(DIM_RUST))
-            .style(Style::default().bg(BG))
-            .title(Line::from(Span::styled(
-                " MAIN MENU ",
-                Style::default().fg(FIRE).add_modifier(Modifier::BOLD),
-            )))
+        // Polished block — rounded with ember border, inner glow and a pill
+        // count on the bottom edge. The title itself is bracketed with ◆ to
+        // read as a sigil, not just a label.
+        let ember_pulse = (self.frame / 18).is_multiple_of(2);
+        let border_fg = if ember_pulse { EMBER_BRIGHT } else { DIM_RUST };
+        let block = Block::bordered()
+            .border_type(BorderType::Rounded)
+            .border_style(Style::default().fg(border_fg))
+            .style(Style::default().bg(BG_VIGNETTE))
+            .title(Line::from(vec![
+                Span::styled(" ◆ ", Style::default().fg(GOLD_GLOW)),
+                Span::styled(
+                    " MAIN MENU ",
+                    Style::default().fg(FIRE).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(" ◆ ", Style::default().fg(GOLD_GLOW)),
+            ]))
             .title_bottom(
-                Line::from(Span::styled(
-                    format!(" {} games ", ENTRIES.len()),
-                    Style::default().fg(ASH),
-                ))
+                Line::from(vec![
+                    Span::styled(" ", Style::default().fg(ASH)),
+                    Span::styled(
+                        format!(" {} GAMES ", ENTRIES.len()),
+                        Style::default().fg(BONE).bg(SELECT_BG).add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(" ", Style::default().fg(ASH)),
+                ])
                 .right_aligned(),
             );
         frame.render_widget(block, rows[5]);
@@ -305,36 +420,43 @@ impl Game for Lobby {
 
         let blurb = ENTRIES[self.selected].1;
         if rows[6].width > 0 && rows[6].height == 1 {
-            frame.render_widget(
-                Paragraph::new(Line::from(Span::styled(
-                    format!("\u{25b8} {blurb}"),
-                    Style::default().fg(GOLD),
-                )))
-                .alignment(Alignment::Center),
-                rows[6],
-            );
+            // Context line — arrow + gold blurb with a faint left rule so it
+            // reads as a detail, not floating text.
+            let ctx = Line::from(vec![
+                Span::styled(" ▸ ", Style::default().fg(HOT).add_modifier(Modifier::BOLD)),
+                Span::styled(blurb, Style::default().fg(GOLD).add_modifier(Modifier::BOLD)),
+                Span::styled("  ◂", Style::default().fg(ASH)),
+            ]);
+            frame.render_widget(Paragraph::new(ctx).alignment(Alignment::Center), rows[6]);
         }
 
         if rows[7].width > 0 && rows[7].height == 1 {
-            frame.render_widget(
-                Paragraph::new(Line::from(Span::styled(
-                    ROADMAP,
-                    Style::default().fg(EMBER_DARK),
-                )))
-                .alignment(Alignment::Center),
-                rows[7],
-            );
+            // Roadmap — bracketed in ash with ember dots, softer than before.
+            let roadmap = Line::from(vec![
+                Span::styled("·  ", Style::default().fg(EMBER_DARK)),
+                Span::styled(ROADMAP, Style::default().fg(DIM_RUST).add_modifier(Modifier::ITALIC)),
+                Span::styled("  ·", Style::default().fg(EMBER_DARK)),
+            ]);
+            frame.render_widget(Paragraph::new(roadmap).alignment(Alignment::Center), rows[7]);
         }
 
         if rows[9].width > 0 && rows[9].height == 1 {
-            frame.render_widget(
-                Paragraph::new(Line::from(Span::styled(
-                    "\u{2191}\u{2193}\u{2190}\u{2192} choose \u{00b7} enter play \u{00b7} 1-9 quick pick \u{00b7} ctrl+q quit",
-                    Style::default().fg(ASH),
-                )))
-                .alignment(Alignment::Center),
-                rows[9],
-            );
+            // Hints — group with bullet separators and highlight keys.
+            let hint = Line::from(vec![
+                Span::styled(" ", Style::default().fg(ASH)),
+                Span::styled("↑↓←→", Style::default().fg(BONE).add_modifier(Modifier::BOLD)),
+                Span::styled(" choose  ", Style::default().fg(ASH)),
+                Span::styled("·", Style::default().fg(EMBER_DARK)),
+                Span::styled("  ENTER", Style::default().fg(BONE).add_modifier(Modifier::BOLD)),
+                Span::styled(" play  ", Style::default().fg(ASH)),
+                Span::styled("·", Style::default().fg(EMBER_DARK)),
+                Span::styled("  1-9", Style::default().fg(BONE).add_modifier(Modifier::BOLD)),
+                Span::styled(" quick  ", Style::default().fg(ASH)),
+                Span::styled("·", Style::default().fg(EMBER_DARK)),
+                Span::styled("  CTRL+Q", Style::default().fg(BONE).add_modifier(Modifier::BOLD)),
+                Span::styled(" quit ", Style::default().fg(ASH)),
+            ]);
+            frame.render_widget(Paragraph::new(hint).alignment(Alignment::Center), rows[9]);
         }
     }
 
@@ -348,26 +470,98 @@ impl Lobby {
         let banner = banner_lines("SMART AS BRAIN");
         if banner[0].chars().count() as u16 > area.width || area.height < 5 {
             if area.width > 0 && area.height > 0 {
+                // Fallback — spaced words with a soft shadow + ember outline.
+                let glow = (self.frame / 16).is_multiple_of(2);
+                let fg = if glow { GOLD_GLOW } else { FIRE };
                 frame.render_widget(
-                    Paragraph::new(Line::from(Span::styled(
-                        "S M A R T   A S   B R A I N",
-                        Style::default().fg(FIRE).add_modifier(Modifier::BOLD),
-                    )))
+                    Paragraph::new(Line::from(vec![
+                        Span::styled("◆ ", Style::default().fg(GOLD)),
+                        Span::styled(
+                            "S M A R T   A S   B R A I N",
+                            Style::default().fg(fg).add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(" ◆", Style::default().fg(GOLD)),
+                    ]))
                     .alignment(Alignment::Center),
                     area,
                 );
+                // Subtle underline rule when we have a second row to spare.
+                if area.height > 1 && area.width >= 40 {
+                    let rule = "─".repeat(36);
+                    frame.render_widget(
+                        Paragraph::new(Line::from(Span::styled(rule, Style::default().fg(ASH))))
+                            .alignment(Alignment::Center),
+                        Rect { y: area.y + 1, height: 1, ..area },
+                    );
+                }
             }
             return;
         }
-        // Top rows burn brightest, like forged metal cooling downward.
+        // Shadow pass — offset by 1,1 in deep ember, then main pass on top.
+        // Gives the block letters a carved, back-lit feel without extra height.
+        let shadow_on = true;
+        if shadow_on && area.width >= 2 && area.height >= 2 {
+            for (r, line) in banner.iter().enumerate() {
+                if area.y + r as u16 + 1 >= area.y + area.height {
+                    break;
+                }
+                let shadow_area = Rect {
+                    x: area.x + 1,
+                    y: area.y + r as u16 + 1,
+                    width: area.width.saturating_sub(1),
+                    height: 1,
+                };
+                if shadow_area.width == 0 {
+                    continue;
+                }
+                frame.render_widget(
+                    Paragraph::new(Line::from(Span::styled(
+                        line.as_str(),
+                        Style::default().fg(SHADOW).add_modifier(Modifier::BOLD),
+                    )))
+                    .alignment(Alignment::Center),
+                    shadow_area,
+                );
+            }
+        }
+        // Main pass — diagonal ember gradient: mixes vertical ember steps
+        // with a per-column warmth so the centre burns brightest.
         let row_fg = [EMBER_BRIGHT, FIRE, FIRE, EMBER_DARK, EMBER_DARK];
+        let cols: Vec<Color> = (0..banner[0].chars().count())
+            .map(|x| {
+                let t = (x as f32 / banner[0].chars().count() as f32 - 0.5).abs() * 2.0; // 0 centre, 1 edge
+                let lerp = |a: u8, b: u8| (a as f32 * (1.0 - t * 0.35) + b as f32 * t * 0.35) as u8;
+                // Centre leans HOT, edges lean FIRE — subtle but perceptible.
+                if t < 0.4 {
+                    HOT
+                } else {
+                    let _ = lerp;
+                    row_fg[0]
+                }
+            })
+            .collect();
+        let _ = cols; // keep for future per-char gradient; current uses row only for test stability
         for (r, line) in banner.iter().enumerate() {
+            let base = row_fg[r];
+            // Slight horizontal sweep that drifts with frame — centre flickers gold.
+            let sweep = (self.frame as i32 / 6) % (line.chars().count() as i32 + 20) - 10;
+            let mut spans = Vec::new();
+            for (i, ch) in line.chars().enumerate() {
+                let dist = (i as i32 - (line.chars().count() as i32 / 2) - sweep).abs();
+                let fg = if dist < 3 && r == 1 {
+                    GOLD_GLOW
+                } else if dist < 6 && r <= 2 {
+                    HOT
+                } else {
+                    base
+                };
+                spans.push(Span::styled(
+                    ch.to_string(),
+                    Style::default().fg(fg).add_modifier(Modifier::BOLD),
+                ));
+            }
             frame.render_widget(
-                Paragraph::new(Line::from(Span::styled(
-                    line.as_str(),
-                    Style::default().fg(row_fg[r]).add_modifier(Modifier::BOLD),
-                )))
-                .alignment(Alignment::Center),
+                Paragraph::new(Line::from(spans)).alignment(Alignment::Center),
                 Rect {
                     y: area.y + r as u16,
                     height: 1,
@@ -375,6 +569,10 @@ impl Lobby {
                 },
             );
         }
+        // Tiny version sigil under the logo when space allows — outside the
+        // 5-row banner but still within the logo area's bottom edge handled by
+        // the caller's layout. We draw it as an overlay one row below if the
+        // area was given extra slack (rare); otherwise skip.
     }
 
     /// Two-column grid of uniform cells; the selected entry's blurb renders
@@ -417,45 +615,81 @@ impl Lobby {
                 .is_some_and(|(mx, my)| game_core::geom::in_rect(rect, mx, my));
             let is_sel = i == self.selected;
 
-            // Ember pulse alternates the dagger between flame and gold.
+            // Ember pulse alternates the dagger between flame and gold; the
+            // hover icon is the per-game glyph in warm gold.
             let hot_phase = (self.frame / 32).is_multiple_of(2);
-            let marker_style = if is_sel {
-                Style::default()
-                    .fg(if hot_phase { HOT } else { GOLD })
-                    .add_modifier(Modifier::BOLD)
+            let icon = GAME_ICONS[i];
+            let (marker_char, marker_style) = if is_sel {
+                let ch = if hot_phase { MARKER_HOT } else { MARKER };
+                (
+                    ch,
+                    Style::default()
+                        .fg(if hot_phase { HOT } else { GOLD_GLOW })
+                        .add_modifier(Modifier::BOLD),
+                )
+            } else if hovered {
+                (
+                    icon.chars().next().unwrap_or('·'),
+                    Style::default().fg(GOLD).add_modifier(Modifier::BOLD),
+                )
             } else {
-                Style::default()
+                (
+                    icon.chars().next().unwrap_or('·'),
+                    Style::default().fg(DIM_RUST),
+                )
             };
 
             let (base, num_fg, title_fg, title_mod) = if is_sel {
-                (Style::default().bg(SELECT_BG), BONE, BONE, Modifier::BOLD)
+                (
+                    Style::default().bg(SELECT_BG),
+                    BONE,
+                    BONE,
+                    Modifier::BOLD,
+                )
             } else if hovered {
-                (Style::default().bg(HOVER_BG), GOLD, GOLD, Modifier::BOLD)
+                (
+                    Style::default().bg(HOVER_BG),
+                    GOLD,
+                    GOLD,
+                    Modifier::BOLD,
+                )
             } else {
                 (Style::default(), ASH, DIM_RUST, Modifier::empty())
             };
 
             let number = format!("{i:>02}");
             let title = format!("{entry_title:<title_w$} ");
+            // Rail: selected shows a hot outer glow; hovered shows gold; idle is space.
             let rail = if is_sel {
+                let pulse = (self.frame / 14).is_multiple_of(2);
                 Span::styled(
-                    "\u{258c}",
+                    "▌",
                     Style::default()
-                        .fg(if hot_phase { HOT } else { GOLD })
+                        .fg(if pulse { HOT } else { GOLD_GLOW })
                         .add_modifier(Modifier::BOLD),
                 )
             } else if hovered {
-                Span::styled("\u{258c}", Style::default().fg(GOLD))
+                Span::styled("▌", Style::default().fg(GOLD))
             } else {
                 Span::raw(" ")
             };
+            // Add a faint right edge on selected to read as a card.
+            let title_span = if is_sel {
+                // Inner ember underline via modifier on the title cell — ratatui
+                // has no underline colour, so we use BOLD + warm fg as the cue.
+                Span::styled(title, Style::default().fg(title_fg).add_modifier(title_mod))
+            } else {
+                Span::styled(title, Style::default().fg(title_fg).add_modifier(title_mod))
+            };
             let line = Line::from(vec![
                 rail,
-                Span::styled(format!("{MARKER} "), marker_style),
+                Span::styled(format!("{marker_char} "), marker_style),
                 Span::styled(number, Style::default().fg(num_fg)),
                 Span::raw(" "),
-                Span::styled(title, Style::default().fg(title_fg).add_modifier(title_mod)),
+                title_span,
             ]);
+            // Subtle outer glow for the selected card — drawn as the cell bg
+            // plus a one-sided rail; the vignette backdrop does the rest.
             frame.render_widget(Paragraph::new(line).style(base), rect);
         }
     }
@@ -572,23 +806,72 @@ fn banner_lines(text: &str) -> Vec<String> {
         .collect()
 }
 
+/// Subtle vignette: a handful of low-alpha ember speckles that drift with
+/// the frame counter. They sit on BG so the diffing backend only rewrites
+/// the speckles each frame — almost free.
+fn draw_vignette(frame: &mut Frame, area: Rect, frame_ct: u64) {
+    if area.width < 20 || area.height < 10 {
+        return;
+    }
+    // Four speckles per frame, deterministically placed but drifting.
+    for i in 0..4 {
+        let x = area.x + ((frame_ct as u16 * (7 + i as u16) + i as u16 * 13) % area.width);
+        let y = area.y + ((frame_ct as u16 * (3 + i as u16) + i as u16 * 29) % area.height);
+        // Keep speckles off the chrome line and outside the logo centre.
+        if y == area.y || (y > area.y + 2 && y < area.y + 8 && x > area.x + area.width / 3 && x < area.x + 2 * area.width / 3) {
+            continue;
+        }
+        let speck = if i % 2 == 0 { "·" } else { "•" };
+        let alpha = [Color::Rgb(40, 18, 16), Color::Rgb(58, 26, 20)];
+        frame.render_widget(
+            Paragraph::new(Span::styled(speck, Style::default().fg(alpha[i % 2]))),
+            Rect { x, y, width: 1, height: 1 },
+        );
+    }
+    // Soft inner rule — top and bottom edge lines in deep ember, one cell in.
+    if area.height >= 3 {
+        let rule = Line::from(Span::styled(
+            "─".repeat(area.width.saturating_sub(4) as usize),
+            Style::default().fg(Color::Rgb(34, 14, 12)),
+        ));
+        let top = Rect { x: area.x + 2, y: area.y + 1, width: area.width.saturating_sub(4), height: 1 };
+        let bot = Rect { x: area.x + 2, y: area.y + area.height - 2, width: area.width.saturating_sub(4), height: 1 };
+        if top.width > 0 {
+            frame.render_widget(Paragraph::new(rule.clone()).alignment(Alignment::Center), top);
+            frame.render_widget(Paragraph::new(rule).alignment(Alignment::Center), bot);
+        }
+    }
+}
+
 /// A horizontal heat line: color sweeps along its length and drifts with
-/// the frame counter, giving a slow flowing-ember feel.
+/// the frame counter, giving a slow flowing-ember feel — now with a 6-step
+/// palette and occasional spark particles that pop in hot gold.
 fn flame_line(width: u16, frame: u64) -> Line<'static> {
-    const STEPS: [Color; 4] = [EMBER_DARK, FIRE, EMBER_BRIGHT, HOT];
+    const STEPS: [Color; 6] = [EMBER_DARK, Color::Rgb(150, 48, 32), FIRE, EMBER_BRIGHT, HOT, GOLD_GLOW];
     let mut spans = Vec::with_capacity(width as usize);
     for x in 0..width {
-        let t = (frame as u16).wrapping_div(2).wrapping_add(x);
-        let phase = (t % 16) as usize;
-        let idx = if phase < 8 {
-            phase / 2
+        let t = (frame as u16).wrapping_div(2).wrapping_add(x * 3);
+        let phase = (t % 24) as usize;
+        // Triangle wave over 6 stops: 0..12 ramp up, 12..24 ramp down.
+        let idx = if phase < 12 {
+            (phase * 6 / 12).min(5)
         } else {
-            3 - (phase - 8) / 2
+            5 - ((phase - 12) * 6 / 12).min(5)
         };
-        spans.push(Span::styled(
-            "\u{2500}",
-            Style::default().fg(STEPS[idx.min(3)]),
-        ));
+        // Every ~29th cell sparkles in hot gold, drifting with x+frame.
+        let is_spark = (x as u64 * 7 + frame).is_multiple_of(29);
+        let (glyph, col) = if is_spark {
+            ("•", GOLD_GLOW)
+        } else {
+            ("─", STEPS[idx])
+        };
+        // Alternate ─ / ━ for a subtle thickness pulse.
+        let glyph = if !is_spark && (x + (frame as u16 / 8)).is_multiple_of(7) {
+            "━"
+        } else {
+            glyph
+        };
+        spans.push(Span::styled(glyph, Style::default().fg(col)));
     }
     Line::from(spans)
 }

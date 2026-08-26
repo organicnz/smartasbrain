@@ -2,7 +2,7 @@ use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
 use game_core::{Game, persist};
 use ratatui::{
     Frame,
-    layout::Rect,
+    layout::{Alignment, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Paragraph},
@@ -15,6 +15,12 @@ const ACCENT_FG: Color = Color::Rgb(122, 162, 247);
 const QUIT_FG: Color = Color::Rgb(200, 60, 50);
 const BONE_FG: Color = Color::Rgb(216, 208, 194);
 const FAINT: Color = Color::Rgb(84, 92, 112);
+// Warm chrome for the lobby — ember-tinged so the DOOM menu feels seamless.
+const LOBBY_BG: Color = Color::Rgb(28, 14, 14);
+const LOBBY_HOVER_BG: Color = Color::Rgb(54, 22, 18);
+const GOLD: Color = Color::Rgb(230, 178, 78);
+const HOT: Color = Color::Rgb(255, 138, 48);
+const EMBER: Color = Color::Rgb(126, 44, 28);
 
 /// How navigation moves between games.
 pub enum TabNav {
@@ -223,13 +229,54 @@ impl Shell {
         // Dim when there is nowhere to go back to.
         let can_back = !self.history.is_empty();
         self.back_btn = Some(b_rect);
+
+        // Lobby-aware palette — warm ember when on the menu, cool steel elsewhere.
+        let is_lobby = self.games[self.active].id() == "lobby";
+        let (chrome_bg, hover_bg) = if is_lobby {
+            (LOBBY_BG, LOBBY_HOVER_BG)
+        } else {
+            (CHROME_BG, CHROME_HOVER_BG)
+        };
         let style_for = |r: Rect, fg: Color| -> Style {
             if hover.is_some_and(|(c, row)| game_core::geom::in_rect(r, c, row)) {
-                Style::default().fg(fg).bg(CHROME_HOVER_BG)
+                Style::default().fg(fg).bg(hover_bg)
             } else {
-                Style::default().fg(fg).bg(CHROME_BG)
+                Style::default().fg(fg).bg(chrome_bg)
             }
         };
+
+        // Centered breadcrumb / title pill — only when there's room between the
+        // left edge and the chrome cluster. It gives the lobby a sense of place
+        // without stealing hit targets.
+        let title = self.games[self.active].title().to_uppercase();
+        let pill = format!(" ◆ {title} ◆ ");
+        let pill_w = pill.chars().count() as u16 + 2;
+        let chrome_left = b_rect.x;
+        let available = chrome_left.saturating_sub(area.x + 2);
+        if available >= pill_w + 4 && area.width >= 40 {
+            let pill_x = area.x + (chrome_left.saturating_sub(area.x).saturating_sub(pill_w)) / 2;
+            let pill_rect = Rect {
+                x: pill_x,
+                y: area.y,
+                width: pill_w,
+                height: 1,
+            };
+            let pill_style = if is_lobby {
+                Style::default().fg(GOLD).bg(chrome_bg).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(ACCENT_FG).bg(chrome_bg).add_modifier(Modifier::BOLD)
+            };
+            frame.render_widget(
+                Paragraph::new(Line::from(vec![
+                    Span::styled(" ", Style::default().bg(chrome_bg)),
+                    Span::styled(pill, pill_style),
+                    Span::styled(" ", Style::default().bg(chrome_bg)),
+                ]))
+                .alignment(Alignment::Center),
+                pill_rect,
+            );
+        }
+
         frame.render_widget(
             Paragraph::new(Line::from(Span::styled(
                 BACK_LABEL,
@@ -243,20 +290,40 @@ impl Shell {
             ))),
             b_rect,
         );
+        // On the lobby the home button reads as the ember accent.
+        let lobby_fg = if is_lobby { GOLD } else { ACCENT_FG };
         frame.render_widget(
             Paragraph::new(Line::from(Span::styled(
                 LOBBY_LABEL,
-                style_for(l_rect, ACCENT_FG).add_modifier(Modifier::BOLD),
+                style_for(l_rect, lobby_fg).add_modifier(Modifier::BOLD),
             ))),
             l_rect,
         );
+        let quit_style = if is_lobby {
+            style_for(q_rect, HOT)
+        } else {
+            style_for(q_rect, QUIT_FG)
+        };
         frame.render_widget(
-            Paragraph::new(Line::from(Span::styled(
-                QUIT_LABEL,
-                style_for(q_rect, QUIT_FG),
-            ))),
+            Paragraph::new(Line::from(Span::styled(QUIT_LABEL, quit_style))),
             q_rect,
         );
+
+        // Thin ember rule under the chrome on the lobby — ties the bar into
+        // the vignette backdrop without adding height.
+        if is_lobby && area.height > 1 && area.width >= 20 {
+            let rule_rect = Rect {
+                x: area.x,
+                y: area.y + 1,
+                width: area.width,
+                height: 1,
+            };
+            let rule = "─".repeat(area.width as usize);
+            frame.render_widget(
+                Paragraph::new(Span::styled(rule, Style::default().fg(EMBER))),
+                rule_rect,
+            );
+        }
     }
 }
 
