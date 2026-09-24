@@ -47,18 +47,18 @@ const COLS: usize = 2;
 /// uniform 7+title_w geometry intact (one char, no extra width) while giving
 /// each title its own silhouette.
 const GAME_ICONS: [&str; 13] = [
-    "▦", // sudoku
-    "●", // go
-    "♞", // chess
-    "◎", // checkers
-    "⬢", // backgammon
-    "◐", // reversi
-    "╋", // morris
-    "▤", // connect four
-    "◉", // mancala
-    "⬡", // dots
-    "⚂", // yahtzee
-    "▭", // dominoes
+    "▦",  // sudoku
+    "●",  // go
+    "♞",  // chess
+    "◎",  // checkers
+    "⬢",  // backgammon
+    "◐",  // reversi
+    "╋",  // morris
+    "▤",  // connect four
+    "◉",  // mancala
+    "⬡",  // dots
+    "⚂",  // yahtzee
+    "▭",  // dominoes
     "⚓", // battleship
 ];
 
@@ -141,7 +141,10 @@ impl Lobby {
             .title_bottom(
                 Line::from(Span::styled(
                     format!(" tab {:02} of {:02} ", self.selected + 1, ENTRIES.len()),
-                    Style::default().fg(BONE).bg(SELECT_BG_HI).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(BONE)
+                        .bg(SELECT_BG_HI)
+                        .add_modifier(Modifier::BOLD),
                 ))
                 .right_aligned(),
             );
@@ -177,10 +180,7 @@ impl Lobby {
         let wrapped = wrap(blurb, wrap_w);
         let blurb_style = Style::default().fg(Color::Rgb(196, 148, 118));
         for l in wrapped {
-            lines.push(Line::from(Span::styled(
-                format!("  {l}"),
-                blurb_style,
-            )));
+            lines.push(Line::from(Span::styled(format!("  {l}"), blurb_style)));
         }
         // Meta line — subtle flavour, keeps pane feeling alive.
         lines.push(Line::from(Span::raw("")));
@@ -195,12 +195,15 @@ impl Lobby {
         if lines.len() > available {
             lines.truncate(available);
         }
-        frame.render_widget(Paragraph::new(lines), Rect {
-            x: inner.x,
-            y: inner.y,
-            width: inner.width,
-            height: inner.height.saturating_sub(footer_h + 1),
-        });
+        frame.render_widget(
+            Paragraph::new(lines),
+            Rect {
+                x: inner.x,
+                y: inner.y,
+                width: inner.width,
+                height: inner.height.saturating_sub(footer_h + 1),
+            },
+        );
 
         // Footer CTA — inset pill that pulses with the ember.
         let pulse = (self.frame / 24).is_multiple_of(2);
@@ -211,10 +214,19 @@ impl Lobby {
                 Span::styled(" ", Style::default().bg(cta_bg)),
                 Span::styled(
                     "▸  ENTER",
-                    Style::default().fg(cta_fg).bg(cta_bg).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(cta_fg)
+                        .bg(cta_bg)
+                        .add_modifier(Modifier::BOLD),
                 ),
                 Span::styled("  ·  ", Style::default().fg(ASH).bg(cta_bg)),
-                Span::styled("LAUNCH ", Style::default().fg(BONE).bg(cta_bg).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "LAUNCH ",
+                    Style::default()
+                        .fg(BONE)
+                        .bg(cta_bg)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::styled("▸", Style::default().fg(cta_fg).bg(cta_bg)),
                 Span::styled(" ", Style::default().bg(cta_bg)),
             ]))
@@ -394,7 +406,10 @@ impl Game for Lobby {
                     Span::styled(" ", Style::default().fg(ASH)),
                     Span::styled(
                         format!(" {} GAMES ", ENTRIES.len()),
-                        Style::default().fg(BONE).bg(SELECT_BG).add_modifier(Modifier::BOLD),
+                        Style::default()
+                            .fg(BONE)
+                            .bg(SELECT_BG)
+                            .add_modifier(Modifier::BOLD),
                     ),
                     Span::styled(" ", Style::default().fg(ASH)),
                 ])
@@ -424,7 +439,10 @@ impl Game for Lobby {
             // reads as a detail, not floating text.
             let ctx = Line::from(vec![
                 Span::styled(" ▸ ", Style::default().fg(HOT).add_modifier(Modifier::BOLD)),
-                Span::styled(blurb, Style::default().fg(GOLD).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    blurb,
+                    Style::default().fg(GOLD).add_modifier(Modifier::BOLD),
+                ),
                 Span::styled("  ◂", Style::default().fg(ASH)),
             ]);
             frame.render_widget(Paragraph::new(ctx).alignment(Alignment::Center), rows[6]);
@@ -434,26 +452,44 @@ impl Game for Lobby {
             // Roadmap — bracketed in ash with ember dots, softer than before.
             let roadmap = Line::from(vec![
                 Span::styled("·  ", Style::default().fg(EMBER_DARK)),
-                Span::styled(ROADMAP, Style::default().fg(DIM_RUST).add_modifier(Modifier::ITALIC)),
+                Span::styled(
+                    ROADMAP,
+                    Style::default().fg(DIM_RUST).add_modifier(Modifier::ITALIC),
+                ),
                 Span::styled("  ·", Style::default().fg(EMBER_DARK)),
             ]);
-            frame.render_widget(Paragraph::new(roadmap).alignment(Alignment::Center), rows[7]);
+            frame.render_widget(
+                Paragraph::new(roadmap).alignment(Alignment::Center),
+                rows[7],
+            );
         }
 
         if rows[9].width > 0 && rows[9].height == 1 {
             // Hints — group with bullet separators and highlight keys.
             let hint = Line::from(vec![
                 Span::styled(" ", Style::default().fg(ASH)),
-                Span::styled("↑↓←→", Style::default().fg(BONE).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "↑↓←→",
+                    Style::default().fg(BONE).add_modifier(Modifier::BOLD),
+                ),
                 Span::styled(" choose  ", Style::default().fg(ASH)),
                 Span::styled("·", Style::default().fg(EMBER_DARK)),
-                Span::styled("  ENTER", Style::default().fg(BONE).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "  ENTER",
+                    Style::default().fg(BONE).add_modifier(Modifier::BOLD),
+                ),
                 Span::styled(" play  ", Style::default().fg(ASH)),
                 Span::styled("·", Style::default().fg(EMBER_DARK)),
-                Span::styled("  1-9", Style::default().fg(BONE).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "  1-9",
+                    Style::default().fg(BONE).add_modifier(Modifier::BOLD),
+                ),
                 Span::styled(" quick  ", Style::default().fg(ASH)),
                 Span::styled("·", Style::default().fg(EMBER_DARK)),
-                Span::styled("  CTRL+Q", Style::default().fg(BONE).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "  CTRL+Q",
+                    Style::default().fg(BONE).add_modifier(Modifier::BOLD),
+                ),
                 Span::styled(" quit ", Style::default().fg(ASH)),
             ]);
             frame.render_widget(Paragraph::new(hint).alignment(Alignment::Center), rows[9]);
@@ -491,7 +527,11 @@ impl Lobby {
                     frame.render_widget(
                         Paragraph::new(Line::from(Span::styled(rule, Style::default().fg(ASH))))
                             .alignment(Alignment::Center),
-                        Rect { y: area.y + 1, height: 1, ..area },
+                        Rect {
+                            y: area.y + 1,
+                            height: 1,
+                            ..area
+                        },
                     );
                 }
             }
@@ -640,19 +680,9 @@ impl Lobby {
             };
 
             let (base, num_fg, title_fg, title_mod) = if is_sel {
-                (
-                    Style::default().bg(SELECT_BG),
-                    BONE,
-                    BONE,
-                    Modifier::BOLD,
-                )
+                (Style::default().bg(SELECT_BG), BONE, BONE, Modifier::BOLD)
             } else if hovered {
-                (
-                    Style::default().bg(HOVER_BG),
-                    GOLD,
-                    GOLD,
-                    Modifier::BOLD,
-                )
+                (Style::default().bg(HOVER_BG), GOLD, GOLD, Modifier::BOLD)
             } else {
                 (Style::default(), ASH, DIM_RUST, Modifier::empty())
             };
@@ -818,14 +848,24 @@ fn draw_vignette(frame: &mut Frame, area: Rect, frame_ct: u64) {
         let x = area.x + ((frame_ct as u16 * (7 + i as u16) + i as u16 * 13) % area.width);
         let y = area.y + ((frame_ct as u16 * (3 + i as u16) + i as u16 * 29) % area.height);
         // Keep speckles off the chrome line and outside the logo centre.
-        if y == area.y || (y > area.y + 2 && y < area.y + 8 && x > area.x + area.width / 3 && x < area.x + 2 * area.width / 3) {
+        if y == area.y
+            || (y > area.y + 2
+                && y < area.y + 8
+                && x > area.x + area.width / 3
+                && x < area.x + 2 * area.width / 3)
+        {
             continue;
         }
         let speck = if i % 2 == 0 { "·" } else { "•" };
         let alpha = [Color::Rgb(40, 18, 16), Color::Rgb(58, 26, 20)];
         frame.render_widget(
             Paragraph::new(Span::styled(speck, Style::default().fg(alpha[i % 2]))),
-            Rect { x, y, width: 1, height: 1 },
+            Rect {
+                x,
+                y,
+                width: 1,
+                height: 1,
+            },
         );
     }
     // Soft inner rule — top and bottom edge lines in deep ember, one cell in.
@@ -834,10 +874,23 @@ fn draw_vignette(frame: &mut Frame, area: Rect, frame_ct: u64) {
             "─".repeat(area.width.saturating_sub(4) as usize),
             Style::default().fg(Color::Rgb(34, 14, 12)),
         ));
-        let top = Rect { x: area.x + 2, y: area.y + 1, width: area.width.saturating_sub(4), height: 1 };
-        let bot = Rect { x: area.x + 2, y: area.y + area.height - 2, width: area.width.saturating_sub(4), height: 1 };
+        let top = Rect {
+            x: area.x + 2,
+            y: area.y + 1,
+            width: area.width.saturating_sub(4),
+            height: 1,
+        };
+        let bot = Rect {
+            x: area.x + 2,
+            y: area.y + area.height - 2,
+            width: area.width.saturating_sub(4),
+            height: 1,
+        };
         if top.width > 0 {
-            frame.render_widget(Paragraph::new(rule.clone()).alignment(Alignment::Center), top);
+            frame.render_widget(
+                Paragraph::new(rule.clone()).alignment(Alignment::Center),
+                top,
+            );
             frame.render_widget(Paragraph::new(rule).alignment(Alignment::Center), bot);
         }
     }
@@ -847,7 +900,14 @@ fn draw_vignette(frame: &mut Frame, area: Rect, frame_ct: u64) {
 /// the frame counter, giving a slow flowing-ember feel — now with a 6-step
 /// palette and occasional spark particles that pop in hot gold.
 fn flame_line(width: u16, frame: u64) -> Line<'static> {
-    const STEPS: [Color; 6] = [EMBER_DARK, Color::Rgb(150, 48, 32), FIRE, EMBER_BRIGHT, HOT, GOLD_GLOW];
+    const STEPS: [Color; 6] = [
+        EMBER_DARK,
+        Color::Rgb(150, 48, 32),
+        FIRE,
+        EMBER_BRIGHT,
+        HOT,
+        GOLD_GLOW,
+    ];
     let mut spans = Vec::with_capacity(width as usize);
     for x in 0..width {
         let t = (frame as u16).wrapping_div(2).wrapping_add(x * 3);

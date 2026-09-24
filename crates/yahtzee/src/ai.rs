@@ -7,10 +7,12 @@ use rand::Rng;
 
 /// Holds to apply, then roll.
 pub fn holds_before_roll(game: &Yahtzee, difficulty: Difficulty) -> [bool; DICE] {
+    let mut rng = rand::thread_rng();
     match difficulty {
-        Difficulty::Easy => [false; DICE],
-        Difficulty::Medium => mode_face_holds(game),
-        Difficulty::Hard => sampled_holds(game, 200, &mut rand::thread_rng()),
+        Difficulty::Easy => easy(game),
+        Difficulty::Medium => medium(game),
+        Difficulty::Hard => hard(game, &mut rng),
+        Difficulty::Expert => sampled_holds(game, 600, &mut rng),
     }
 }
 
@@ -40,6 +42,26 @@ pub fn best_category(game: &Yahtzee, difficulty: Difficulty) -> Option<Category>
             })
         }
     }
+}
+
+/// Easy: randomly select a hold pattern.
+fn easy(_game: &Yahtzee) -> [bool; DICE] {
+    let mut rng = rand::thread_rng();
+    let mut holds = [false; DICE];
+    for hold in &mut holds {
+        *hold = rng.gen_bool(0.3);
+    }
+    holds
+}
+
+/// Medium: mode-face hold (keep most common dice face).
+fn medium(game: &Yahtzee) -> [bool; DICE] {
+    mode_face_holds(game)
+}
+
+/// Hard: sampled expected-value hold selection.
+fn hard(game: &Yahtzee, rng: &mut impl Rng) -> [bool; DICE] {
+    sampled_holds(game, 200, rng)
 }
 
 fn open_slots(game: &Yahtzee) -> Vec<Category> {

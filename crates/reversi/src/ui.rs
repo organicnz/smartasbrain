@@ -353,7 +353,7 @@ fn draw_panel(
 
 /// Setup-menu geometry: fixed 36x11 box, one row per choice plus key hints.
 const SETUP_W: u16 = 36;
-const SETUP_H: u16 = 11;
+const SETUP_H: u16 = 13;
 
 /// Full-screen opponent picker shown instead of the board while active.
 /// Registers each item's hit rect into `items_out` for click activation.
@@ -416,7 +416,7 @@ pub fn draw_setup(
         };
         frame.render_widget(
             Paragraph::new(Line::from(Span::styled(
-                "up/down \u{00b7} 1-7 \u{00b7} enter picks",
+                "up/down \u{00b7} 1-9 \u{00b7} enter picks",
                 Style::default().fg(DIM_FG),
             )))
             .alignment(Alignment::Center),
@@ -508,14 +508,16 @@ mod tests {
                 "VS AI - EASY",
                 "VS AI - MEDIUM",
                 "VS AI - HARD",
+                "VS AI - EXPERT",
                 "AI DUEL - EASY",
                 "AI DUEL - MEDIUM",
                 "AI DUEL - HARD",
+                "AI DUEL - EXPERT",
             ]
         );
 
         let mut game = ReversiGame::new();
-        for digit in '5'..'8' {
+        for digit in '5'..='9' {
             game.handle_key(key(KeyCode::Char(digit)));
             assert_eq!(
                 game.setup_sel,
@@ -523,16 +525,16 @@ mod tests {
                 "digit {digit} jumps to its row"
             );
         }
-        assert_eq!(game.setup_sel, 6);
-        game.handle_key(key(KeyCode::Enter)); // confirm AI DUEL - HARD
+        assert_eq!(game.setup_sel, 8);
+        game.handle_key(key(KeyCode::Enter));
         assert!(!game.setup_open);
-        assert_eq!(game.opponent, crate::Opponent::Battle(Difficulty::Hard));
+        assert_eq!(game.opponent, crate::Opponent::Battle(Difficulty::Expert));
     }
 
     #[test]
     fn duel_self_play_progresses_or_ends() {
         let mut game = ReversiGame::new();
-        game.handle_key(key(KeyCode::Char('7'))); // AI DUEL - HARD
+        game.handle_key(key(KeyCode::Char('8'))); // AI DUEL - HARD
         game.handle_key(key(KeyCode::Enter));
         assert!(matches!(
             game.opponent,
@@ -562,7 +564,7 @@ mod tests {
     #[test]
     fn duel_input_inert() {
         let mut game = ReversiGame::new();
-        game.handle_key(key(KeyCode::Char('5'))); // AI DUEL - EASY
+        game.handle_key(key(KeyCode::Char('6'))); // AI DUEL - EASY
         game.handle_key(key(KeyCode::Enter));
         assert!(!game.setup_open);
         Game::tick(&mut game);
@@ -668,10 +670,10 @@ mod tests {
         // Digits never reach the board once the menu is closed...
         game = ReversiGame::new();
         game.handle_key(key(KeyCode::Enter));
-        game.handle_key(key(KeyCode::Char('5')));
+        game.handle_key(key(KeyCode::Char('6')));
         assert!(!game.setup_open);
         // ...and 'm' brings the menu back over a fresh board.
-        game.handle_key(key(KeyCode::Char('5')));
+        game.handle_key(key(KeyCode::Char('6')));
         game.handle_key(key(KeyCode::Enter));
         game.handle_key(key(KeyCode::Char('m')));
         assert!(game.setup_open);

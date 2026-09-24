@@ -61,11 +61,14 @@ impl BattleshipGame {
     }
 
     fn confirm_setup(&mut self, index: usize) {
-        let all = Difficulty::ALL;
+        let count = Difficulty::ALL.len();
         self.opponent = match index {
             0 => Opponent::Human,
-            1..=3 => Opponent::Ai(all[index - 1]),
-            _ => Opponent::Battle(all[(index - 4).min(2)]),
+            i if (1..=count).contains(&i) => Opponent::Ai(Difficulty::ALL[i - 1]),
+            i if (count + 1..=2 * count).contains(&i) => {
+                Opponent::Battle(Difficulty::ALL[i - count - 1])
+            }
+            _ => return,
         };
         self.ai_side = Side::Black;
         self.reset();
@@ -143,7 +146,12 @@ impl Game for BattleshipGame {
                         (self.menu_index + ui::SETUP_ITEMS.len() - 1) % ui::SETUP_ITEMS.len()
                 }
                 Down | Char('j') => self.menu_index = (self.menu_index + 1) % ui::SETUP_ITEMS.len(),
-                Char(d @ '1'..='7') => self.menu_index = (d as u8 - b'1') as usize,
+                Char(c)
+                    if c.to_digit(10)
+                        .is_some_and(|d| (1..=ui::SETUP_ITEMS.len() as u32).contains(&d)) =>
+                {
+                    self.menu_index = c.to_digit(10).unwrap() as usize - 1;
+                }
                 Enter | Char(' ') => self.confirm_setup(self.menu_index),
                 _ => {}
             }
@@ -435,9 +443,13 @@ mod tests {
     #[test]
     fn duel_menu_mapping_and_self_play_fires() {
         let mut g = BattleshipGame::new();
-        key(&mut g, KeyCode::Char('5')); // AI DUEL - EASY
+        key(&mut g, KeyCode::Char('6')); // AI DUEL - EASY
         key(&mut g, KeyCode::Enter);
         assert_eq!(g.opponent, Opponent::Battle(Difficulty::Easy));
+        let mut expert = BattleshipGame::new();
+        key(&mut expert, KeyCode::Char('9'));
+        key(&mut expert, KeyCode::Enter);
+        assert_eq!(expert.opponent, Opponent::Battle(Difficulty::Expert));
         let before = g.shot_count(Side::White) + g.shot_count(Side::Black);
         for _ in 0..300 {
             g.tick();
@@ -474,7 +486,7 @@ mod tests {
     #[test]
     fn duel_input_is_inert_except_keeper_keys() {
         let mut g = BattleshipGame::new();
-        key(&mut g, KeyCode::Char('5'));
+        key(&mut g, KeyCode::Char('6'));
         key(&mut g, KeyCode::Enter);
         for _ in 0..12 {
             g.tick();
@@ -539,6 +551,26 @@ mod tests {
             modifiers: KeyModifiers::NONE,
         });
         assert_eq!(g.shot_count(Side::White), before + 1);
+    }
+
+    #[test]
+    fn setup_exposes_and_accepts_the_expert_mouse_row() {
+        let mut g = BattleshipGame::new();
+        let backend = TestBackend::new(80, 24);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        terminal.draw(|f| Game::draw(&mut g, f, f.area())).unwrap();
+        assert_eq!(g.menu_rects.len(), ui::SETUP_ITEMS.len());
+        let (rect, index) = *g.menu_rects.last().unwrap();
+        assert_eq!(index, 8);
+        g.handle_mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: rect.x,
+            row: rect.y,
+            modifiers: KeyModifiers::NONE,
+        });
+        assert_eq!(g.opponent, Opponent::Battle(Difficulty::Expert));
+        g.tick();
+        assert!(g.shot_count(Side::White) + g.shot_count(Side::Black) > 0);
     }
 
     #[test]

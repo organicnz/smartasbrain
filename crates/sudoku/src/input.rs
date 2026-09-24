@@ -90,8 +90,11 @@ fn on_menu_key(app: &mut App, code: KeyCode) {
             app.difficulty = (app.difficulty + 1) % DIFFICULTIES.len();
         }
         KeyCode::Enter | KeyCode::Char(' ') => app.start(),
-        KeyCode::Char(c @ '1'..='3') => {
-            app.difficulty = (c as u8 - b'1') as usize;
+        KeyCode::Char(c)
+            if c.to_digit(10)
+                .is_some_and(|d| (1..=DIFFICULTIES.len() as u32).contains(&d)) =>
+        {
+            app.difficulty = c.to_digit(10).unwrap() as usize - 1;
             app.start();
         }
         _ => {}
@@ -140,6 +143,21 @@ mod tests {
             row: 0,
             modifiers: KeyModifiers::NONE,
         }
+    }
+
+    #[test]
+    fn menu_accepts_expert_and_rejects_out_of_range_shortcuts() {
+        let mut expert = App::new();
+        expert.persist_records = false;
+        on_menu_key(&mut expert, KeyCode::Char('4'));
+        assert_eq!(expert.difficulty, 3);
+        assert_eq!(expert.state, State::Playing);
+
+        let mut invalid = App::new();
+        invalid.persist_records = false;
+        on_menu_key(&mut invalid, KeyCode::Char('5'));
+        assert_eq!(invalid.difficulty, 0);
+        assert_eq!(invalid.state, State::Menu);
     }
 
     #[test]

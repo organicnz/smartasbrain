@@ -91,14 +91,14 @@ impl MorrisGame {
 
     /// Apply the highlighted menu row and start play.
     fn confirm_menu(&mut self) {
+        let count = Difficulty::ALL.len();
         self.opponent = match self.menu_index {
             0 => Opponent::Human,
-            1 => Opponent::Ai(Difficulty::Easy),
-            2 => Opponent::Ai(Difficulty::Medium),
-            3 => Opponent::Ai(Difficulty::Hard),
-            4 => Opponent::Battle(Difficulty::Easy),
-            5 => Opponent::Battle(Difficulty::Medium),
-            _ => Opponent::Battle(Difficulty::Hard),
+            i if (1..=count).contains(&i) => Opponent::Ai(Difficulty::ALL[i - 1]),
+            i if (count + 1..=2 * count).contains(&i) => {
+                Opponent::Battle(Difficulty::ALL[i - count - 1])
+            }
+            _ => return,
         };
         self.ai_side = Side::Black;
         self.reset();
@@ -228,8 +228,11 @@ impl Game for MorrisGame {
                 KeyCode::Down | KeyCode::Char('j') => {
                     self.menu_index = (self.menu_index + 1) % ui::MENU_ITEMS.len();
                 }
-                KeyCode::Char(d @ '1'..='7') => {
-                    self.menu_index = d.to_digit(10).unwrap_or(1) as usize - 1;
+                KeyCode::Char(c)
+                    if c.to_digit(10)
+                        .is_some_and(|d| (1..=ui::MENU_ITEMS.len() as u32).contains(&d)) =>
+                {
+                    self.menu_index = c.to_digit(10).unwrap() as usize - 1;
                 }
                 KeyCode::Enter | KeyCode::Char(' ') => self.confirm_menu(),
                 _ => {}
@@ -510,21 +513,24 @@ mod tests {
 
         g.handle_key(KeyEvent::from(KeyCode::Char('m')));
         assert!(g.setup_open, "m reopens setup over a fresh game");
-        g.handle_key(KeyEvent::from(KeyCode::Char('6'))); // AI DUEL - MEDIUM
+        g.handle_key(KeyEvent::from(KeyCode::Char('7'))); // AI DUEL - MEDIUM
         g.handle_key(KeyEvent::from(KeyCode::Enter));
         assert_eq!(g.opponent, Opponent::Battle(Difficulty::Medium));
     }
 
     #[test]
     fn duel_menu_mapping() {
-        let g = started_duel('7'); // AI DUEL - HARD
+        let g = started_duel('8'); // AI DUEL - HARD
         assert_eq!(g.opponent, Opponent::Battle(Difficulty::Hard));
         assert!(!g.setup_open, "confirming a duel closes setup");
         assert_eq!(g.state.status(), Status::Ongoing);
         assert_eq!(g.state.turn(), Side::White, "white opens every duel");
 
+        let expert = started_duel('9');
+        assert_eq!(expert.opponent, Opponent::Battle(Difficulty::Expert));
+
         let mut g = MorrisGame::new();
-        for _ in 0..4 {
+        for _ in 0..5 {
             g.handle_key(KeyEvent::from(KeyCode::Down)); // AI DUEL - EASY
         }
         g.handle_key(KeyEvent::from(KeyCode::Enter));
@@ -533,7 +539,7 @@ mod tests {
 
     #[test]
     fn duel_self_play_progresses_or_ends() {
-        let mut g = started_duel('5');
+        let mut g = started_duel('6');
         let mut early_stones = 0usize;
         let mut ended = false;
         let mut turns_seen = std::collections::HashSet::new();
@@ -566,7 +572,7 @@ mod tests {
 
     #[test]
     fn duel_input_inert_mid_duel() {
-        let mut g = started_duel('5');
+        let mut g = started_duel('6');
         for _ in 0..60 {
             g.tick();
             if g.state.removal_pending()

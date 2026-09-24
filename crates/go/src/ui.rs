@@ -29,14 +29,16 @@ const MENU_SELECT_BG: Color = Color::Rgb(88, 16, 14);
 const MENU_HOVER_BG: Color = Color::Rgb(54, 22, 18);
 
 /// Entries of the setup overlay; digits 1..=N jump to an entry.
-pub const SETUP_ITEMS: [&str; 7] = [
+pub const SETUP_ITEMS: [&str; 9] = [
     "TWO PLAYERS",
     "VS AI - EASY",
     "VS AI - MEDIUM",
     "VS AI - HARD",
+    "VS AI - EXPERT",
     "AI DUEL - EASY",
     "AI DUEL - MEDIUM",
     "AI DUEL - HARD",
+    "AI DUEL - EXPERT",
 ];
 
 /// Panel facts the game layer computes each frame.

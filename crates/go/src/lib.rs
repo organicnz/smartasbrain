@@ -83,7 +83,11 @@ impl GoGame {
         self.setup_sel = match self.opponent {
             Opponent::Human => 0,
             Opponent::Ai(d) => 1 + Difficulty::ALL.iter().position(|&x| x == d).unwrap_or(0),
-            Opponent::Battle(d) => 4 + Difficulty::ALL.iter().position(|&x| x == d).unwrap_or(0),
+            Opponent::Battle(d) => {
+                Difficulty::ALL.len()
+                    + 1
+                    + Difficulty::ALL.iter().position(|&x| x == d).unwrap_or(0)
+            }
         };
         self.setup_hover = None;
         self.setup_open = true;
@@ -91,11 +95,14 @@ impl GoGame {
     }
 
     fn confirm_setup(&mut self, item: usize) {
+        let count = Difficulty::ALL.len();
         self.opponent = match item {
             0 => Opponent::Human,
-            1..=3 => Opponent::Ai(Difficulty::ALL[item - 1]),
-            // Catch-all clamps stray indices to the last entry.
-            _ => Opponent::Battle(Difficulty::ALL[(item - 4).min(Difficulty::ALL.len() - 1)]),
+            i if (1..=count).contains(&i) => Opponent::Ai(Difficulty::ALL[i - 1]),
+            i if (count + 1..=2 * count).contains(&i) => {
+                Opponent::Battle(Difficulty::ALL[i - count - 1])
+            }
+            _ => return,
         };
         self.ai_side = Player::White;
         self.setup_open = false;
@@ -150,8 +157,11 @@ impl Game for GoGame {
                 }
                 KeyCode::Down | KeyCode::Char('j') => self.setup_sel = (self.setup_sel + 1) % count,
                 KeyCode::Enter | KeyCode::Char(' ') => self.confirm_setup(self.setup_sel),
-                KeyCode::Char(c @ '1'..='7') => {
-                    let item = c as usize - '1' as usize;
+                KeyCode::Char(c)
+                    if c.to_digit(10)
+                        .is_some_and(|d| (1..=count as u32).contains(&d)) =>
+                {
+                    let item = c.to_digit(10).unwrap() as usize - 1;
                     self.setup_sel = item;
                     self.confirm_setup(item);
                 }
@@ -415,9 +425,13 @@ mod tests {
     #[test]
     fn duel_menu_mapping() {
         let mut game = GoGame::new();
-        game.handle_key(key(KeyCode::Char('7'))); // AI DUEL - HARD
+        game.handle_key(key(KeyCode::Char('8'))); // AI DUEL - HARD
         assert_eq!(game.opponent, Opponent::Battle(Difficulty::Hard));
         assert!(!game.setup_open);
+
+        let mut expert = GoGame::new();
+        expert.handle_key(key(KeyCode::Char('9')));
+        assert_eq!(expert.opponent, Opponent::Battle(Difficulty::Expert));
 
         // A stray confirm mid-duel places nothing and stays closed.
         game.handle_key(key(KeyCode::Enter));
@@ -431,7 +445,7 @@ mod tests {
     #[test]
     fn duel_self_play_progresses() {
         let mut game = GoGame::new();
-        game.handle_key(key(KeyCode::Char('5'))); // AI DUEL - EASY
+        game.handle_key(key(KeyCode::Char('6'))); // AI DUEL - EASY
         assert_eq!(game.opponent, Opponent::Battle(Difficulty::Easy));
         assert!(!game.setup_open);
 
@@ -454,7 +468,7 @@ mod tests {
     #[test]
     fn duel_input_inert() {
         let mut game = GoGame::new();
-        game.handle_key(key(KeyCode::Char('5'))); // AI DUEL - EASY
+        game.handle_key(key(KeyCode::Char('6'))); // AI DUEL - EASY
         game.tick(); // Black opens
 
         let board = game.state.board().to_vec();

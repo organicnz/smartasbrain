@@ -31,14 +31,16 @@ const BONE: Color = Color::Rgb(216, 208, 194);
 const PICK_SELECT_BG: Color = Color::Rgb(88, 16, 14);
 const PICK_HOVER_BG: Color = Color::Rgb(54, 22, 18);
 
-pub(crate) const SETUP_ITEMS: [&str; 7] = [
+pub(crate) const SETUP_ITEMS: [&str; 9] = [
     "TWO PLAYERS",
     "VS AI - EASY",
     "VS AI - MEDIUM",
     "VS AI - HARD",
+    "VS AI - EXPERT",
     "AI DUEL - EASY",
     "AI DUEL - MEDIUM",
     "AI DUEL - HARD",
+    "AI DUEL - EXPERT",
 ];
 
 /// Dot spacing inside the board block.
@@ -389,10 +391,10 @@ pub(crate) fn draw_setup(
     items_out: &mut Vec<(Rect, usize)>,
 ) {
     items_out.clear();
-    if area.width < 24 || area.height < 13 {
+    if area.width < 24 || area.height < 12 {
         return;
     }
-    let popup = centered_rect(area, 30, 13);
+    let popup = centered_rect(area, 30, 12);
     let block = Block::bordered()
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(FIRE))
@@ -405,7 +407,7 @@ pub(crate) fn draw_setup(
     frame.render_widget(block, popup);
 
     for (i, label) in SETUP_ITEMS.iter().enumerate() {
-        let y = inner.y + (i as u16) * 2;
+        let y = inner.y + i as u16;
         if i > 0 && y >= inner.y + inner.height.saturating_sub(1) {
             break;
         }

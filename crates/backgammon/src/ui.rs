@@ -52,14 +52,16 @@ const PANEL_LINES: u16 = 7;
 const PANEL_BLOCK_H: u16 = PANEL_LINES + 2;
 
 /// Rows of the setup menu, in confirm order.
-pub(crate) const MENU_ITEMS: [&str; 7] = [
+pub(crate) const MENU_ITEMS: [&str; 9] = [
     "TWO PLAYERS",
     "VS AI - EASY",
     "VS AI - MEDIUM",
     "VS AI - HARD",
+    "VS AI - EXPERT",
     "AI DUEL - EASY",
     "AI DUEL - MEDIUM",
     "AI DUEL - HARD",
+    "AI DUEL - EXPERT",
 ];
 
 /// A clickable board region.
@@ -205,10 +207,10 @@ pub(crate) fn draw_setup(
     items_out: &mut Vec<(Rect, usize)>,
 ) {
     items_out.clear();
-    if area.width < 36 || area.height < 11 {
+    if area.width < 36 || area.height < 13 {
         return;
     }
-    let popup = centered_rect(area, 36, 11);
+    let popup = centered_rect(area, 36, 13);
     let block = Block::bordered()
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(FIRE))
@@ -256,7 +258,7 @@ pub(crate) fn draw_setup(
         };
         frame.render_widget(
             Paragraph::new(Line::from(Span::styled(
-                "up/down · 1-7 · enter picks",
+                "up/down · 1-9 · enter picks",
                 Style::default().fg(DIM_FG),
             )))
             .alignment(Alignment::Center),

@@ -262,9 +262,15 @@ impl Shell {
                 height: 1,
             };
             let pill_style = if is_lobby {
-                Style::default().fg(GOLD).bg(chrome_bg).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(GOLD)
+                    .bg(chrome_bg)
+                    .add_modifier(Modifier::BOLD)
             } else {
-                Style::default().fg(ACCENT_FG).bg(chrome_bg).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(ACCENT_FG)
+                    .bg(chrome_bg)
+                    .add_modifier(Modifier::BOLD)
             };
             frame.render_widget(
                 Paragraph::new(Line::from(vec![

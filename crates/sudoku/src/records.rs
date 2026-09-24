@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub const DIFFICULTY_COUNT: usize = 3;
+pub const DIFFICULTY_COUNT: usize = 4;
 
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
 pub struct Records {
@@ -154,6 +154,8 @@ mod tests {
         assert!(records.record_win(0, 61_500));
         records.record_start(0);
         records.record_win(2, 30_000);
+        records.record_start(3);
+        assert!(records.record_win(3, 20_000));
         assert!(
             !records.record_win(2, 35_000),
             "slower time is not a record"
@@ -165,6 +167,9 @@ mod tests {
         assert_eq!(loaded.best_ms[0], Some(61_500));
         assert_eq!(loaded.wins[2], 2);
         assert_eq!(loaded.played[0], 1);
+        assert_eq!(loaded.best_ms[3], Some(20_000));
+        assert_eq!(loaded.wins[3], 1);
+        assert_eq!(loaded.played[3], 1);
         assert_eq!(loaded.best_ms[1], None);
 
         fs::remove_dir_all(&dir).ok();

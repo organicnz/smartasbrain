@@ -13,6 +13,8 @@ const INF: i32 = WIN * 2;
 /// Easy picks uniformly among root moves scoring within this many
 /// centipawns of the best root move.
 const EASY_BAND: i32 = 200;
+const NODE_BUDGET: u32 = 1_000;
+const EXPERT_NODE_BUDGET: u32 = 2_000;
 
 const MAN: i32 = 100;
 const KING: i32 = 160;
@@ -23,10 +25,8 @@ const EDGE: i32 = 5;
 
 /// Best legal move for the side to move, or `None` once the game is over.
 ///
-/// Easy's personality: instead of an extra random-blunder coin flip, it
-/// searches one ply deep and then plays uniformly at random among root moves
-/// within [`EASY_BAND`] of the best score. That keeps its play variable and
-/// weak while never declining a forced capture outright.
+/// Easy picks uniformly among root moves; Medium/Hard search deeper;
+/// Expert does even more thorough search.
 pub fn best_move(game: &Checkers, difficulty: Difficulty) -> Option<(usize, usize)> {
     if game.status() != Status::Ongoing {
         return None;
@@ -39,11 +39,19 @@ pub fn best_move(game: &Checkers, difficulty: Difficulty) -> Option<(usize, usiz
         Difficulty::Easy => 1,
         Difficulty::Medium => 3,
         Difficulty::Hard => 6,
+        Difficulty::Expert => 8,
     };
+    let budget = match difficulty {
+        Difficulty::Expert => EXPERT_NODE_BUDGET,
+        _ => NODE_BUDGET,
+    };
+    let mut nodes = 0;
+
     match difficulty {
         Difficulty::Easy => {
-            let scores = root_scores(game, &roots, depth);
-            let &best = scores.iter().max()?;
+            roots.shuffle(&mut thread_rng());
+            let scores = root_scores(game, &roots, depth, &mut nodes, budget);
+            let best = scores.iter().copied().max()?;
             let pool: Vec<(usize, usize)> = roots
                 .into_iter()
                 .zip(scores)
@@ -52,10 +60,9 @@ pub fn best_move(game: &Checkers, difficulty: Difficulty) -> Option<(usize, usiz
                 .collect();
             pool.choose(&mut thread_rng()).copied()
         }
-        Difficulty::Medium | Difficulty::Hard => {
-            // Shuffle first so strict-max comparison breaks ties randomly.
+        Difficulty::Medium | Difficulty::Hard | Difficulty::Expert => {
             roots.shuffle(&mut thread_rng());
-            let scores = root_scores(game, &roots, depth);
+            let scores = root_scores(game, &roots, depth, &mut nodes, budget);
             let mut best: Option<((usize, usize), i32)> = None;
             for (mv, score) in roots.into_iter().zip(scores) {
                 if best.is_none_or(|(_, s)| score > s) {
@@ -80,7 +87,13 @@ fn root_moves(game: &Checkers) -> Vec<(usize, usize)> {
 }
 
 /// Negamax value of each root move, from the mover's perspective.
-fn root_scores(game: &Checkers, roots: &[(usize, usize)], depth: i32) -> Vec<i32> {
+fn root_scores(
+    game: &Checkers,
+    roots: &[(usize, usize)],
+    depth: i32,
+    nodes: &mut u32,
+    budget: u32,
+) -> Vec<i32> {
     roots
         .iter()
         .copied()
@@ -90,16 +103,23 @@ fn root_scores(game: &Checkers, roots: &[(usize, usize)], depth: i32) -> Vec<i32
             if child.chain_from().is_some() {
                 // Multi-jump chain: the same side keeps moving, so the child
                 // is scored without flipping perspective.
-                negamax(&child, depth, -INF, INF)
+                negamax(&child, depth, -INF, INF, nodes, budget)
             } else {
-                -negamax(&child, depth - 1, -INF, INF)
+                -negamax(&child, depth - 1, -INF, INF, nodes, budget)
             }
         })
         .collect()
 }
 
 /// Negamax with alpha-beta pruning; score is relative to the side to move.
-fn negamax(game: &Checkers, depth: i32, mut alpha: i32, beta: i32) -> i32 {
+fn negamax(
+    game: &Checkers,
+    depth: i32,
+    mut alpha: i32,
+    beta: i32,
+    nodes: &mut u32,
+    budget: u32,
+) -> i32 {
     if let Status::Won(winner) = game.status() {
         return if winner == game.turn() {
             WIN
@@ -109,17 +129,18 @@ fn negamax(game: &Checkers, depth: i32, mut alpha: i32, beta: i32) -> i32 {
             -(WIN + depth.max(0))
         };
     }
-    if depth <= 0 {
+    if depth <= 0 || *nodes >= budget {
         return evaluate(game);
     }
+    *nodes += 1;
     let mut best = -INF;
     for &(from, to) in &root_moves(game) {
         let mut child = game.clone();
         child.play(from, to);
         let score = if child.chain_from().is_some() {
-            negamax(&child, depth, alpha, beta)
+            negamax(&child, depth, alpha, beta, nodes, budget)
         } else {
-            -negamax(&child, depth - 1, -beta, -alpha)
+            -negamax(&child, depth - 1, -beta, -alpha, nodes, budget)
         };
         if score > best {
             best = score;

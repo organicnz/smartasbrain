@@ -61,6 +61,7 @@ pub fn step(
         Difficulty::Medium => greedy_step(state),
         // Cap hit / no line found: greedy is always available as a floor.
         Difficulty::Hard => hard_step(state).or_else(|| greedy_step(state)),
+        Difficulty::Expert => hard_step(state).or_else(|| greedy_step(state)),
     }
 }
 
@@ -309,6 +310,7 @@ mod tests {
             );
             assert!(step(&g, Difficulty::Medium, &mut rng).is_some());
             assert!(step(&g, Difficulty::Hard, &mut rng).is_some());
+            assert!(step(&g, Difficulty::Expert, &mut rng).is_some());
         }
     }
 }

@@ -89,14 +89,14 @@ impl BackgammonGame {
 
     /// Apply the highlighted menu row and start play.
     fn confirm_menu(&mut self) {
+        let count = Difficulty::ALL.len();
         self.opponent = match self.menu_index {
             0 => Opponent::Human,
-            1 => Opponent::Ai(Difficulty::Easy),
-            2 => Opponent::Ai(Difficulty::Medium),
-            3 => Opponent::Ai(Difficulty::Hard),
-            4 => Opponent::Battle(Difficulty::Easy),
-            5 => Opponent::Battle(Difficulty::Medium),
-            _ => Opponent::Battle(Difficulty::Hard),
+            i if (1..=count).contains(&i) => Opponent::Ai(Difficulty::ALL[i - 1]),
+            i if (count + 1..=2 * count).contains(&i) => {
+                Opponent::Battle(Difficulty::ALL[i - count - 1])
+            }
+            _ => return,
         };
         self.ai_side = Side::Black;
         self.reset();
@@ -231,8 +231,11 @@ impl Game for BackgammonGame {
                 KeyCode::Down | KeyCode::Char('j') => {
                     self.menu_index = (self.menu_index + 1) % ui::MENU_ITEMS.len();
                 }
-                KeyCode::Char(d @ '1'..='7') => {
-                    self.menu_index = d.to_digit(10).unwrap_or(1) as usize - 1;
+                KeyCode::Char(c)
+                    if c.to_digit(10)
+                        .is_some_and(|d| (1..=ui::MENU_ITEMS.len() as u32).contains(&d)) =>
+                {
+                    self.menu_index = c.to_digit(10).unwrap() as usize - 1;
                 }
                 KeyCode::Enter | KeyCode::Char(' ') => self.confirm_menu(),
                 _ => {}
@@ -540,7 +543,7 @@ mod tests {
         assert_eq!(g.state.points()[0], 2, "fresh start layout");
     }
 
-    /// A running duel at the given digit ('5'..'7' pick the difficulty).
+    /// A running duel at the given digit ('6'..'9' pick the difficulty).
     fn started_duel(digit: char) -> BackgammonGame {
         let mut g = BackgammonGame::new();
         g.handle_key(KeyEvent::from(KeyCode::Char(digit)));
@@ -550,13 +553,17 @@ mod tests {
 
     #[test]
     fn duel_menu_mapping() {
-        let g = started_duel('7'); // AI DUEL - HARD
+        let g = started_duel('8'); // AI DUEL - HARD
         assert_eq!(g.opponent, Opponent::Battle(Difficulty::Hard));
         assert!(!g.setup_open, "confirming a duel closes setup");
         assert_eq!(g.state.phase(), Phase::Roll);
         assert_eq!(g.state.turn(), Side::Black, "black opens the duel");
 
+        let expert = started_duel('9');
+        assert_eq!(expert.opponent, Opponent::Battle(Difficulty::Expert));
+
         let mut g = BackgammonGame::new();
+        g.handle_key(KeyEvent::from(KeyCode::Down));
         g.handle_key(KeyEvent::from(KeyCode::Down));
         g.handle_key(KeyEvent::from(KeyCode::Down));
         g.handle_key(KeyEvent::from(KeyCode::Down));
@@ -567,7 +574,7 @@ mod tests {
 
     #[test]
     fn duel_self_play_runs_toward_completion() {
-        let mut g = started_duel('5');
+        let mut g = started_duel('6');
         let start_off = g.state.off();
         let mut progressed = false;
         for _ in 0..5000 {
@@ -598,7 +605,7 @@ mod tests {
 
     #[test]
     fn duel_input_inert_except_restart_key() {
-        let mut g = started_duel('5');
+        let mut g = started_duel('6');
         for _ in 0..50 {
             g.tick(); // reach black's first move phase
             if g.state.phase() == Phase::Move {

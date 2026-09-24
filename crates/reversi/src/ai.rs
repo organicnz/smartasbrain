@@ -13,7 +13,8 @@ const MATE: i32 = 100_000;
 /// Window bound safely beyond any reachable score.
 const INF: i32 = 2 * MATE;
 /// Safety valve so pathological positions cannot stall a frame forever.
-const NODE_BUDGET: u32 = 300_000;
+const NODE_BUDGET: u32 = 256;
+const EXPERT_NODE_BUDGET: u32 = 512;
 /// Easy picks uniformly among its best handful of root moves.
 const EASY_POOL: usize = 6;
 
@@ -34,6 +35,7 @@ fn depth_of(difficulty: Difficulty) -> i32 {
         Difficulty::Easy => 1,
         Difficulty::Medium => 4,
         Difficulty::Hard => 6,
+        Difficulty::Expert => 8,
     }
 }
 
@@ -206,12 +208,17 @@ pub fn best_move(game: &Reversi, difficulty: Difficulty) -> Option<usize> {
     }
     root.shuffle(&mut thread_rng());
     let depth = depth_of(difficulty);
+    let budget = if difficulty == Difficulty::Expert {
+        EXPERT_NODE_BUDGET
+    } else {
+        NODE_BUDGET
+    };
 
     if difficulty == Difficulty::Easy {
         let mut scored: Vec<(usize, i32)> = root
             .into_iter()
             .map(|mv| {
-                let mut nodes = NODE_BUDGET;
+                let mut nodes = budget;
                 (
                     mv,
                     score_child(game, mv, depth - 1, 1, -INF, INF, &mut nodes),
@@ -225,7 +232,7 @@ pub fn best_move(game: &Reversi, difficulty: Difficulty) -> Option<usize> {
             .map(|&(mv, _)| mv);
     }
 
-    let mut nodes = NODE_BUDGET;
+    let mut nodes = budget;
     let mut best = root[0];
     let mut alpha = -INF;
     for &mv in &root {

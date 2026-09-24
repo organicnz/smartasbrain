@@ -13,6 +13,7 @@ pub fn best_edge(game: &Dots, difficulty: Difficulty) -> Option<usize> {
         Difficulty::Easy => easy(game, &open),
         Difficulty::Medium => medium(game, &open),
         Difficulty::Hard => hard(game, &open),
+        Difficulty::Expert => hard(game, &open),
     }
 }
 

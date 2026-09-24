@@ -7,9 +7,8 @@ use game_core::Difficulty;
 
 /// Mate-scale score; ply adjustments prefer faster wins.
 const WIN: i32 = 100_000;
-/// Node ceiling shared across one entire `best_move` call. Past the cap the
-/// search falls back to static evals, keeping Hard interactive in debug.
-const NODE_BUDGET: u32 = 80_000;
+const NODE_BUDGET: u32 = 12_000;
+const EXPERT_NODE_BUDGET: u32 = 24_000;
 /// Root column order steering alpha-beta toward tactical lines first.
 const CENTER_ORDER: [usize; COLS] = [3, 2, 4, 1, 5, 0, 6];
 
@@ -19,24 +18,36 @@ pub fn best_move(game: &Connect4, difficulty: Difficulty) -> Option<usize> {
     if legal.is_empty() {
         return None;
     }
-    let mut nodes = 0_u32;
     match difficulty {
-        Difficulty::Easy => easy_band(game, &legal, &mut rng, &mut nodes),
-        Difficulty::Medium => argmax_root(game, &legal, 6, &mut nodes),
-        Difficulty::Hard => {
-            let mut best = legal.first().copied();
-            for depth in 1..=9_u8 {
-                match argmax_root(game, &legal, depth, &mut nodes) {
-                    Some(b) => best = Some(b),
-                    None => break,
-                }
-                if nodes > NODE_BUDGET {
-                    break;
-                }
-            }
-            best
+        Difficulty::Easy => {
+            let mut nodes = 0;
+            easy_band(game, &legal, &mut rng, &mut nodes, NODE_BUDGET)
+        }
+        Difficulty::Medium => {
+            let mut nodes = 0;
+            argmax_root(game, &legal, 6, &mut nodes, NODE_BUDGET)
+        }
+        Difficulty::Hard => search_best(game, &legal, 9, NODE_BUDGET),
+        Difficulty::Expert => search_best(game, &legal, 9, EXPERT_NODE_BUDGET),
+    }
+}
+
+fn search_best(game: &Connect4, legal: &[usize], max_depth: u8, budget: u32) -> Option<usize> {
+    let mut nodes = 0;
+    let mut best = legal.first().copied();
+    for depth in 1..=max_depth {
+        if nodes >= budget {
+            break;
+        }
+        let Some(candidate) = argmax_root(game, legal, depth, &mut nodes, budget) else {
+            break;
+        };
+        best = Some(candidate);
+        if nodes >= budget {
+            break;
         }
     }
+    best
 }
 
 /// Depth-2 search, then a uniform pick among columns within `BAND` points
@@ -46,11 +57,12 @@ fn easy_band(
     legal: &[usize],
     rng: &mut impl rand::Rng,
     nodes: &mut u32,
+    budget: u32,
 ) -> Option<usize> {
     const BAND: i32 = 15;
     let scored: Vec<(usize, i32)> = legal
         .iter()
-        .filter_map(|&c| root_score(game, c, 2, nodes).map(|s| (c, s)))
+        .filter_map(|&c| root_score(game, c, 2, nodes, budget).map(|s| (c, s)))
         .collect();
     let best = scored.iter().map(|(_, s)| *s).max()?;
     let pool: Vec<usize> = scored
@@ -67,7 +79,7 @@ fn easy_band(
 }
 
 /// Score of dropping into `col` at `depth`, from the mover's perspective.
-fn root_score(game: &Connect4, col: usize, depth: u8, nodes: &mut u32) -> Option<i32> {
+fn root_score(game: &Connect4, col: usize, depth: u8, nodes: &mut u32, budget: u32) -> Option<i32> {
     let mut child = game.clone();
     if !child.drop(col) {
         return None;
@@ -79,14 +91,24 @@ fn root_score(game: &Connect4, col: usize, depth: u8, nodes: &mut u32) -> Option
         i32::MAX,
         1,
         nodes,
+        budget,
     ))
 }
 
-fn argmax_root(game: &Connect4, legal: &[usize], depth: u8, nodes: &mut u32) -> Option<usize> {
+fn argmax_root(
+    game: &Connect4,
+    legal: &[usize],
+    depth: u8,
+    nodes: &mut u32,
+    budget: u32,
+) -> Option<usize> {
     let mut best: Option<(usize, i32)> = None;
     let mut alpha = -i32::MAX;
     for &col in CENTER_ORDER.iter().filter(|c| legal.contains(c)) {
-        let Some(score) = root_score(game, col, depth, nodes) else {
+        if *nodes >= budget {
+            break;
+        }
+        let Some(score) = root_score(game, col, depth, nodes, budget) else {
             continue;
         };
         if best.is_none_or(|(_, s)| score > s) {
@@ -104,6 +126,7 @@ fn negamax(
     beta: i32,
     ply: u32,
     nodes: &mut u32,
+    budget: u32,
 ) -> i32 {
     // Terminal from the previous drop lands here: winner made the last move,
     // so the side to move is either losing or the game drew.
@@ -118,14 +141,14 @@ fn negamax(
         Status::Draw => return 0,
         Status::Ongoing => {}
     }
-    if depth == 0 {
+    if depth == 0 || *nodes >= budget {
         return heuristic(game);
     }
     let mut best = -i32::MAX;
     for &col in CENTER_ORDER.iter() {
         // Budget guard inside the tree: past the cap we fall back to the
         // heuristic so Hard stays interactive even in debug builds.
-        if *nodes >= NODE_BUDGET {
+        if *nodes >= budget {
             return heuristic(game);
         }
         let mut child = game.clone();
@@ -133,7 +156,7 @@ fn negamax(
             continue;
         }
         *nodes += 1;
-        let score = -negamax(&child, depth - 1, -beta, -alpha, ply + 1, nodes);
+        let score = -negamax(&child, depth - 1, -beta, -alpha, ply + 1, nodes, budget);
         best = best.max(score);
         alpha = alpha.max(score);
         if alpha >= beta {

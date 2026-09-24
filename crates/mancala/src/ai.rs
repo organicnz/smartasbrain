@@ -13,6 +13,7 @@ pub fn best_move(game: &Mancala, difficulty: Difficulty) -> Option<usize> {
         Difficulty::Easy => easy(game, &legal),
         Difficulty::Medium => greedy(game, &legal),
         Difficulty::Hard => search_root(game, &legal),
+        Difficulty::Expert => search_root(game, &legal),
     }
 }
 

@@ -19,15 +19,16 @@ pub use engine::{Reversi, Side, Status};
 /// Starting cursor square: d3, a legal opening placement.
 const START_CURSOR: usize = engine::sq(2, 3);
 
-/// Setup-menu rows in selection order; digits 1-7 jump straight to a row.
-const SETUP_ITEMS: [&str; 7] = [
+const SETUP_ITEMS: [&str; 9] = [
     "TWO PLAYERS",
     "VS AI - EASY",
     "VS AI - MEDIUM",
     "VS AI - HARD",
+    "VS AI - EXPERT",
     "AI DUEL - EASY",
     "AI DUEL - MEDIUM",
     "AI DUEL - HARD",
+    "AI DUEL - EXPERT",
 ];
 
 /// Match configuration: two humans, a human against the engine, or a
@@ -91,11 +92,14 @@ impl ReversiGame {
 
     /// Apply a confirmed setup-menu choice and start the match.
     fn confirm_setup(&mut self, choice: usize) {
+        let count = Difficulty::ALL.len();
         self.opponent = match choice {
             0 => Opponent::Human,
-            1..=3 => Opponent::Ai(Difficulty::ALL[choice - 1]),
-            4..=6 => Opponent::Battle(Difficulty::ALL[choice - 4]),
-            _ => Opponent::Human,
+            i if (1..=count).contains(&i) => Opponent::Ai(Difficulty::ALL[i - 1]),
+            i if (count + 1..=2 * count).contains(&i) => {
+                Opponent::Battle(Difficulty::ALL[i - count - 1])
+            }
+            _ => return,
         };
         if matches!(self.opponent, Opponent::Ai(_)) {
             self.ai_side = Side::Black;
@@ -215,8 +219,11 @@ impl Game for ReversiGame {
                 KeyCode::Up | KeyCode::Char('k') => self.cycle_setup(-1),
                 KeyCode::Down | KeyCode::Char('j') => self.cycle_setup(1),
                 KeyCode::Enter | KeyCode::Char(' ') => self.confirm_setup(self.setup_sel),
-                KeyCode::Char(c @ '1'..='7') => {
-                    self.setup_sel = c.to_digit(10).unwrap_or(1) as usize - 1;
+                KeyCode::Char(c)
+                    if c.to_digit(10)
+                        .is_some_and(|d| (1..=SETUP_ITEMS.len() as u32).contains(&d)) =>
+                {
+                    self.setup_sel = c.to_digit(10).unwrap() as usize - 1;
                 }
                 _ => {}
             }

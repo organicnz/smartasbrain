@@ -10,10 +10,11 @@ use crate::{
     records::Records,
 };
 
-pub const DIFFICULTIES: [(&str, usize, &str); 3] = [
+pub const DIFFICULTIES: [(&str, usize, &str); 4] = [
     ("easy", 45, "a gentle warm-up"),
     ("medium", 34, "a solid challenge"),
     ("hard", 27, "for the fearless"),
+    ("expert", 17, "for the maniac"),
 ];
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

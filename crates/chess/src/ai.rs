@@ -23,7 +23,8 @@ const MATE: i32 = 100_000;
 /// Window bound safely beyond any reachable score.
 const INF: i32 = 2 * MATE;
 
-/// Easy blunders freely inside this centipawn radius around the best move.
+const NODE_BUDGET: u32 = 64;
+const EXPERT_NODE_BUDGET: u32 = 128;
 const EASY_BLUNDER_CP: i32 = 250;
 
 /// Search depth per strength preset.
@@ -32,6 +33,7 @@ fn depth_of(difficulty: Difficulty) -> i32 {
         Difficulty::Easy => 1,
         Difficulty::Medium => 3,
         Difficulty::Hard => 4,
+        Difficulty::Expert => 5,
     }
 }
 
@@ -94,20 +96,29 @@ fn legal_moves(game: &Chess) -> Vec<(usize, usize)> {
 }
 
 /// Negamax with alpha-beta pruning; scores always favour faster mates.
-fn negamax(game: &Chess, depth: i32, ply: i32, mut alpha: i32, beta: i32) -> i32 {
+fn negamax(
+    game: &Chess,
+    depth: i32,
+    ply: i32,
+    mut alpha: i32,
+    beta: i32,
+    nodes: &mut u32,
+    budget: u32,
+) -> i32 {
     match game.status() {
         Status::Won(_) => return -(MATE - ply),
         Status::Stalemate => return 0,
         Status::Ongoing => {}
     }
-    if depth == 0 {
+    if depth == 0 || *nodes >= budget {
         return evaluate(game);
     }
+    *nodes += 1;
     let mut best = -INF;
     for &(from, to) in &legal_moves(game) {
         let mut child = game.clone();
         child.play(from, to);
-        let score = -negamax(&child, depth - 1, ply + 1, -beta, -alpha);
+        let score = -negamax(&child, depth - 1, ply + 1, -beta, -alpha, nodes, budget);
         if score > best {
             best = score;
         }
@@ -134,13 +145,27 @@ pub fn best_move(game: &Chess, difficulty: Difficulty) -> Option<(usize, usize)>
     }
     root.shuffle(&mut rng);
     let depth = depth_of(difficulty);
+    let budget = if difficulty == Difficulty::Expert {
+        EXPERT_NODE_BUDGET
+    } else {
+        NODE_BUDGET
+    };
+    let mut nodes = 0;
 
     if difficulty == Difficulty::Easy {
         let mut scores = Vec::with_capacity(root.len());
         for &(from, to) in &root {
             let mut child = game.clone();
             child.play(from, to);
-            scores.push(-negamax(&child, depth - 1, 1, -INF, INF));
+            scores.push(-negamax(
+                &child,
+                depth - 1,
+                1,
+                -INF,
+                INF,
+                &mut nodes,
+                budget,
+            ));
         }
         let best_score = scores.iter().copied().max().unwrap_or(0);
         return root
@@ -153,9 +178,12 @@ pub fn best_move(game: &Chess, difficulty: Difficulty) -> Option<(usize, usize)>
     let mut best = root[0];
     let mut alpha = -INF;
     for &(from, to) in &root {
+        if nodes >= budget {
+            break;
+        }
         let mut child = game.clone();
         child.play(from, to);
-        let score = -negamax(&child, depth - 1, 1, -INF, -alpha);
+        let score = -negamax(&child, depth - 1, 1, -INF, -alpha, &mut nodes, budget);
         if score > alpha {
             alpha = score;
             best = (from, to);

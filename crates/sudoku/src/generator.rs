@@ -241,6 +241,16 @@ mod tests {
     }
 
     #[test]
+    fn expert_target_is_unique_and_bounded() {
+        let started = std::time::Instant::now();
+        let puzzle = generate_seeded(17, 17);
+        assert!(is_valid_solution(&puzzle.solution));
+        assert!(puzzle.board.cells.iter().filter(|&&v| v != 0).count() >= 17);
+        assert_eq!(count_solutions(&mut puzzle.board.cells.clone(), 2), 1);
+        assert!(started.elapsed() < std::time::Duration::from_secs(5));
+    }
+
+    #[test]
     fn hard_target_terminates_quickly_enough() {
         let start = std::time::Instant::now();
         for seed in 100..104u64 {

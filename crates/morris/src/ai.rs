@@ -15,12 +15,15 @@ use crate::engine::{ADJACENCY, Action, MILLS, Morris, POINTS, Phase, Side, Statu
 const MATE: i32 = 100_000;
 /// Window bound safely beyond any reachable score.
 const INF: i32 = 2 * MATE;
+const NODE_BUDGET: i32 = 12_000;
+const EXPERT_NODE_BUDGET: i32 = 24_000;
 
 fn depth_of(difficulty: Difficulty) -> i32 {
     match difficulty {
         Difficulty::Easy => 1,
         Difficulty::Medium => 3,
         Difficulty::Hard => 5,
+        Difficulty::Expert => 7,
     }
 }
 
@@ -151,14 +154,23 @@ fn expand(game: &Morris, action: Action) -> Vec<Morris> {
     }
 }
 
-fn negamax(game: &Morris, depth: i32, ply: i32, mut alpha: i32, beta: i32) -> i32 {
+fn negamax(
+    game: &Morris,
+    depth: i32,
+    ply: i32,
+    mut alpha: i32,
+    beta: i32,
+    nodes: &mut i32,
+    budget: i32,
+) -> i32 {
     if game.status() != Status::Ongoing {
         // The side to move here is always the defeated one.
         return -(MATE - ply);
     }
-    if depth <= 0 {
+    if depth <= 0 || *nodes >= budget {
         return evaluate(game);
     }
+    *nodes += 1;
     let moves = actions(game);
     if moves.is_empty() {
         return evaluate(game);
@@ -166,7 +178,7 @@ fn negamax(game: &Morris, depth: i32, ply: i32, mut alpha: i32, beta: i32) -> i3
     let mut best = -INF;
     for action in moves {
         for child in expand(game, action) {
-            let score = -negamax(&child, depth - 1, ply + 1, -beta, -alpha);
+            let score = -negamax(&child, depth - 1, ply + 1, -beta, -alpha, nodes, budget);
             if score > best {
                 best = score;
             }
@@ -183,7 +195,14 @@ fn negamax(game: &Morris, depth: i32, ply: i32, mut alpha: i32, beta: i32) -> i3
 
 /// Score every root action exactly and pick uniformly among the top four
 /// (Easy) or walk the root with a rising window and take the optimum.
-fn pick_root(game: &Morris, root: Vec<Action>, depth: i32, difficulty: Difficulty) -> Action {
+fn pick_root(
+    game: &Morris,
+    root: Vec<Action>,
+    depth: i32,
+    difficulty: Difficulty,
+    nodes: &mut i32,
+    budget: i32,
+) -> Action {
     let mut rng = thread_rng();
     if difficulty == Difficulty::Easy {
         let mut scored: Vec<(Action, i32)> = root
@@ -191,7 +210,7 @@ fn pick_root(game: &Morris, root: Vec<Action>, depth: i32, difficulty: Difficult
             .map(|action| {
                 let score = expand(game, action)
                     .into_iter()
-                    .map(|child| -negamax(&child, depth - 1, 1, -INF, INF))
+                    .map(|child| -negamax(&child, depth - 1, 1, -INF, INF, nodes, budget))
                     .max()
                     .unwrap_or(-INF);
                 (action, score)
@@ -205,7 +224,7 @@ fn pick_root(game: &Morris, root: Vec<Action>, depth: i32, difficulty: Difficult
         let mut alpha = -INF;
         for action in root {
             for child in expand(game, action) {
-                let score = -negamax(&child, depth - 1, 1, -INF, -alpha);
+                let score = -negamax(&child, depth - 1, 1, -INF, -alpha, nodes, budget);
                 if score > alpha {
                     alpha = score;
                     best = action;
@@ -228,7 +247,20 @@ pub fn best_action(game: &Morris, difficulty: Difficulty) -> Option<Action> {
     }
     // Shuffle first so ties and Easy picks vary between runs.
     root.shuffle(&mut thread_rng());
-    Some(pick_root(game, root, depth_of(difficulty), difficulty))
+    let budget = if difficulty == Difficulty::Expert {
+        EXPERT_NODE_BUDGET
+    } else {
+        NODE_BUDGET
+    };
+    let mut nodes = 0;
+    Some(pick_root(
+        game,
+        root,
+        depth_of(difficulty),
+        difficulty,
+        &mut nodes,
+        budget,
+    ))
 }
 
 /// Whose stone to take while [`Morris::removal_pending`] holds, honouring the
@@ -243,6 +275,12 @@ pub fn best_removal(game: &Morris, difficulty: Difficulty) -> Option<usize> {
     }
     options.shuffle(&mut thread_rng());
     let depth = depth_of(difficulty).saturating_sub(1);
+    let budget = if difficulty == Difficulty::Expert {
+        EXPERT_NODE_BUDGET
+    } else {
+        NODE_BUDGET
+    };
+    let mut nodes = 0;
     let mut rng = thread_rng();
     if difficulty == Difficulty::Easy {
         let mut scored: Vec<(usize, i32)> = options
@@ -250,7 +288,7 @@ pub fn best_removal(game: &Morris, difficulty: Difficulty) -> Option<usize> {
             .map(|&r| {
                 let mut child = game.clone();
                 child.remove(r);
-                (r, -negamax(&child, depth, 1, -INF, INF))
+                (r, -negamax(&child, depth, 1, -INF, INF, &mut nodes, budget))
             })
             .collect();
         scored.sort_by_key(|(_, score)| std::cmp::Reverse(*score));
@@ -262,7 +300,7 @@ pub fn best_removal(game: &Morris, difficulty: Difficulty) -> Option<usize> {
         for &r in &options {
             let mut child = game.clone();
             child.remove(r);
-            let score = -negamax(&child, depth, 1, -INF, -alpha);
+            let score = -negamax(&child, depth, 1, -INF, -alpha, &mut nodes, budget);
             if score > alpha {
                 alpha = score;
                 best = r;

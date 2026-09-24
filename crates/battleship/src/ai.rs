@@ -21,6 +21,7 @@ pub fn best_shot(game: &Battleship, difficulty: Difficulty) -> Option<usize> {
         }
         Difficulty::Medium => target_or_hunt(game, &view, &open, &mut rng),
         Difficulty::Hard => density(game, &view, &open),
+        Difficulty::Expert => density(game, &view, &open),
     }
 }
 

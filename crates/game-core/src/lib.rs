@@ -16,11 +16,13 @@ pub enum Difficulty {
     Medium,
     /// Deeper search, few free gifts.
     Hard,
+    /// Expert-level search, punishes mistakes harshly.
+    Expert,
 }
 
 impl Difficulty {
     /// All presets in menu order.
-    pub const ALL: [Difficulty; 3] = [Self::Easy, Self::Medium, Self::Hard];
+    pub const ALL: [Difficulty; 4] = [Self::Easy, Self::Medium, Self::Hard, Self::Expert];
 
     /// Short uppercase label for menus, e.g. `"EASY"`.
     #[must_use]
@@ -29,6 +31,7 @@ impl Difficulty {
             Self::Easy => "EASY",
             Self::Medium => "MEDIUM",
             Self::Hard => "HARD",
+            Self::Expert => "EXPERT",
         }
     }
 }

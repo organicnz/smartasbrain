@@ -99,10 +99,14 @@ impl CheckersGame {
 
     /// Apply a setup entry and start a fresh game under it.
     fn confirm_setup(&mut self, index: usize) {
+        let count = Difficulty::ALL.len();
         self.opponent = match index {
             0 => Opponent::Human,
-            1..=3 => Opponent::Ai(Difficulty::ALL[index - 1]),
-            _ => Opponent::Battle(Difficulty::ALL[index - 4]),
+            i if (1..=count).contains(&i) => Opponent::Ai(Difficulty::ALL[i - 1]),
+            i if (count + 1..=2 * count).contains(&i) => {
+                Opponent::Battle(Difficulty::ALL[i - count - 1])
+            }
+            _ => return,
         };
         self.ai_side = Side::Black;
         self.setup_open = false;
@@ -368,9 +372,10 @@ mod tests {
     #[test]
     fn duel_menu_selection_maps_correctly() {
         for (digit, difficulty) in [
-            ('5', Difficulty::Easy),
-            ('6', Difficulty::Medium),
-            ('7', Difficulty::Hard),
+            ('6', Difficulty::Easy),
+            ('7', Difficulty::Medium),
+            ('8', Difficulty::Hard),
+            ('9', Difficulty::Expert),
         ] {
             let mut game = CheckersGame::new();
             key(&mut game, KeyCode::Char(digit));
@@ -381,7 +386,7 @@ mod tests {
 
         // Navigating onto a duel row and confirming maps the same way.
         let mut game = CheckersGame::new();
-        for _ in 0..4 {
+        for _ in 0..5 {
             key(&mut game, KeyCode::Down);
         }
         key(&mut game, KeyCode::Enter);
@@ -392,7 +397,7 @@ mod tests {
     #[test]
     fn duel_self_play_runs_and_can_end() {
         let mut game = CheckersGame::new();
-        key(&mut game, KeyCode::Char('7'));
+        key(&mut game, KeyCode::Char('8'));
         assert_eq!(game.opponent, Opponent::Battle(Difficulty::Hard));
         assert_eq!(game.state.counts(), (12, 12));
 
@@ -476,7 +481,7 @@ mod tests {
 
         // 'q' from the board quits.
         let mut game = CheckersGame::new();
-        key(&mut game, KeyCode::Char('5'));
+        key(&mut game, KeyCode::Char('6'));
         key(&mut game, KeyCode::Char('q'));
         assert!(game.wants_quit());
     }
@@ -486,6 +491,7 @@ mod tests {
         let mut game = CheckersGame::new();
         assert!(game.setup_open);
         draw_once(&mut game);
+        assert_eq!(game.menu_rects.len(), ui::SETUP_ITEMS.len());
         assert!(game.geom.is_none(), "overlay replaces the board");
 
         // Clicking where the board would be must not touch any piece.

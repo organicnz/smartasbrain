@@ -62,11 +62,14 @@ impl DotsGame {
     }
 
     fn confirm_setup(&mut self, index: usize) {
-        let all = Difficulty::ALL;
+        let count = Difficulty::ALL.len();
         self.opponent = match index {
             0 => Opponent::Human,
-            1..=3 => Opponent::Ai(all[index - 1]),
-            _ => Opponent::Battle(all[(index - 4).min(2)]),
+            i if (1..=count).contains(&i) => Opponent::Ai(Difficulty::ALL[i - 1]),
+            i if (count + 1..=2 * count).contains(&i) => {
+                Opponent::Battle(Difficulty::ALL[i - count - 1])
+            }
+            _ => return,
         };
         self.ai_side = Side::Black;
         self.reset();
@@ -166,7 +169,12 @@ impl Game for DotsGame {
                         (self.menu_index + ui::SETUP_ITEMS.len() - 1) % ui::SETUP_ITEMS.len()
                 }
                 Down | Char('j') => self.menu_index = (self.menu_index + 1) % ui::SETUP_ITEMS.len(),
-                Char(d @ '1'..='7') => self.menu_index = (d as u8 - b'1') as usize,
+                Char(c)
+                    if c.to_digit(10)
+                        .is_some_and(|d| (1..=ui::SETUP_ITEMS.len() as u32).contains(&d)) =>
+                {
+                    self.menu_index = c.to_digit(10).unwrap() as usize - 1;
+                }
                 Enter | Char(' ') => self.confirm_setup(self.menu_index),
                 _ => {}
             }
@@ -354,9 +362,15 @@ mod tests {
     #[test]
     fn duel_menu_mapping_and_self_play_completes() {
         let mut g = DotsGame::new();
-        key(&mut g, KeyCode::Char('5')); // AI DUEL - EASY
+        key(&mut g, KeyCode::Char('6')); // AI DUEL - EASY
         key(&mut g, KeyCode::Enter);
         assert_eq!(g.opponent, Opponent::Battle(Difficulty::Easy));
+
+        let mut expert = DotsGame::new();
+        key(&mut expert, KeyCode::Char('9'));
+        key(&mut expert, KeyCode::Enter);
+        assert_eq!(expert.opponent, Opponent::Battle(Difficulty::Expert));
+
         for _ in 0..2000 {
             g.tick();
             if !g.engine.status().is_ongoing() {
@@ -372,7 +386,7 @@ mod tests {
     #[test]
     fn duel_input_is_inert_except_keeper_keys() {
         let mut g = DotsGame::new();
-        key(&mut g, KeyCode::Char('5'));
+        key(&mut g, KeyCode::Char('6'));
         key(&mut g, KeyCode::Enter);
         for _ in 0..10 {
             g.tick();

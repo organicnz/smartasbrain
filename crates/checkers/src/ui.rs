@@ -383,14 +383,16 @@ fn draw_panel(
 }
 
 /// Setup overlay entries in confirm order; digit `n` picks entry `n - 1`.
-pub const SETUP_ITEMS: [&str; 7] = [
+pub const SETUP_ITEMS: [&str; 9] = [
     "TWO PLAYERS",
     "VS AI - EASY",
     "VS AI - MEDIUM",
     "VS AI - HARD",
+    "VS AI - EXPERT",
     "AI DUEL - EASY",
     "AI DUEL - MEDIUM",
     "AI DUEL - HARD",
+    "AI DUEL - EXPERT",
 ];
 
 /// Full-screen DOOM-flavoured setup menu. Rebuilds one hitbox per entry into

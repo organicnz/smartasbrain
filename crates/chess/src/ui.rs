@@ -364,11 +364,9 @@ fn draw_panel(
     );
 }
 
-/// Setup-menu geometry: box width/height and per-item row stride. Seven
-/// rows at stride 2 plus the key-hint row need 17 outer rows.
 const SETUP_W: u16 = 40;
-const SETUP_H: u16 = 17;
-const SETUP_STRIDE: u16 = 2;
+const SETUP_H: u16 = 12;
+const SETUP_STRIDE: u16 = 1;
 
 /// Full-screen opponent picker shown instead of the board while active.
 /// Registers each item's hit rect into `buttons` for click activation.
@@ -602,6 +600,7 @@ mod tests {
         terminal
             .draw(|f| Game::draw(&mut game, f, f.area()))
             .unwrap();
+        assert_eq!(game.buttons.len(), 8);
 
         // Pretend a board was drawn earlier: plant stale geometry, then click
         // where e2 would sit. The open menu must reject it.
@@ -700,14 +699,16 @@ mod tests {
                 "VS AI - EASY",
                 "VS AI - MEDIUM",
                 "VS AI - HARD",
+                "VS AI - EXPERT",
                 "AI DUEL - EASY",
                 "AI DUEL - MEDIUM",
                 "AI DUEL - HARD",
+                "AI DUEL - EXPERT",
             ]
         );
 
         let mut game = ChessGame::new();
-        for digit in '5'..'8' {
+        for digit in '5'..='9' {
             game.handle_key(key(KeyCode::Char(digit)));
             assert_eq!(
                 game.setup_sel,
@@ -715,19 +716,19 @@ mod tests {
                 "digit {digit} jumps to its row"
             );
         }
-        assert_eq!(game.setup_sel, 6);
-        game.handle_key(key(KeyCode::Enter)); // confirm AI DUEL - HARD
+        assert_eq!(game.setup_sel, 8);
+        game.handle_key(key(KeyCode::Enter));
         assert!(!game.setup_open);
         assert_eq!(
             game.opponent,
-            crate::Opponent::Battle(game_core::Difficulty::Hard)
+            crate::Opponent::Battle(game_core::Difficulty::Expert)
         );
     }
 
     #[test]
     fn duel_self_play_progresses_or_ends() {
         let mut game = ChessGame::new();
-        game.handle_key(key(KeyCode::Char('7'))); // AI DUEL - HARD
+        game.handle_key(key(KeyCode::Char('8'))); // AI DUEL - HARD
         game.handle_key(key(KeyCode::Enter));
         assert!(matches!(
             game.opponent,
@@ -767,7 +768,7 @@ mod tests {
     #[test]
     fn duel_input_inert() {
         let mut game = ChessGame::new();
-        game.handle_key(key(KeyCode::Char('5'))); // AI DUEL - EASY
+        game.handle_key(key(KeyCode::Char('6'))); // AI DUEL - EASY
         game.handle_key(key(KeyCode::Enter));
         assert!(!game.setup_open);
         Game::tick(&mut game);

@@ -55,6 +55,7 @@ pub fn best_move(state: &GoState, difficulty: Difficulty) -> Option<usize> {
         Difficulty::Easy => easy_pick(state, &cands),
         Difficulty::Medium => medium_pick(state, &cands),
         Difficulty::Hard => hard_pick(state, cands),
+        Difficulty::Expert => hard_pick(state, cands),
     }
 }
 

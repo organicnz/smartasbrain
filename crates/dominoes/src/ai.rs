@@ -27,6 +27,11 @@ pub fn best_move(game: &Dominoes, difficulty: Difficulty) -> Option<usize> {
             .copied()
             .max_by_key(|&(i, _, _)| hard_score(game, i))
             .map(|(i, _, _)| i),
+        Difficulty::Expert => legal
+            .iter()
+            .copied()
+            .max_by_key(|&(i, _, _)| hard_score(game, i))
+            .map(|(i, _, _)| i),
     }
 }
 
